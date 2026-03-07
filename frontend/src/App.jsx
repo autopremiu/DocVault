@@ -7,6 +7,7 @@ import api from './utils/api';
 import toast from 'react-hot-toast';
 import Dashboard from './pages/Dashboard';
 import Subir from './pages/Subir';
+import VisorDocumento from './components/VisorDocumento';
 
 // ─── LOGIN ───────────────────────────────────────────────────
 function Login() {
@@ -49,6 +50,7 @@ function Documentos() {
   const [docs,setDocs]=useState([]); const [total,setTotal]=useState(0); const [pages,setPages]=useState(1); const [page,setPage]=useState(1); const [loading,setLoading]=useState(true);
   const [filtros,setFiltros]=useState({tipo:'',buscar:'',carpeta_id:'',orden:'created_at',dir:'DESC'});
   const [carpetas,setCarpetas]=useState([]);
+  const [visor, setVisor] = useState(null); // { uuid, nombre, tipo }
   useEffect(()=>{api.get('/carpetas').then(r=>setCarpetas(r.data)).catch(()=>{});},[]);
   const cargar = async(p=1) => {
     setLoading(true);
@@ -103,6 +105,7 @@ function Documentos() {
                     <td style={{padding:'11px 18px',fontSize:11,color:'#00e5a0',borderBottom:'1px solid #1e2330'}}>☁️ C{d.mega_numero}</td>
                     <td style={{padding:'11px 18px',fontSize:11,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.fecha}</td>
                     <td style={{padding:'11px 18px',borderBottom:'1px solid #1e2330'}}>
+                      <button style={{background:'rgba(79,124,255,0.1)',border:'1px solid rgba(79,124,255,0.3)',cursor:'pointer',fontSize:13,padding:'4px 10px',borderRadius:6,color:'#4f7cff',marginRight:6,fontWeight:500}} onClick={()=>setVisor({uuid:d.uuid,nombre:d.nombre_display,tipo:d.tipo})} title="Ver / Editar">👁 Ver</button>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#6b7592',marginRight:4}} onClick={()=>dl(d.uuid,d.nombre_display)} title="Descargar">⬇</button>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#ff6b6b'}} onClick={()=>del(d.uuid,d.nombre_display)} title="Eliminar">🗑</button>
                     </td>
@@ -119,6 +122,16 @@ function Documentos() {
           <button style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 16px',color:'#e8ecf4',cursor:'pointer',fontSize:13}} disabled={page===pages} onClick={()=>cargar(page+1)}>Siguiente →</button>
         </div>}
       </div>
+
+      {/* VISOR MODAL */}
+      {visor && (
+        <VisorDocumento
+          uuid={visor.uuid}
+          nombre={visor.nombre}
+          tipo={visor.tipo}
+          onClose={() => setVisor(null)}
+        />
+      )}
     </div>
   );
 }

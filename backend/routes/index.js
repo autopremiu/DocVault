@@ -29,6 +29,41 @@ router.post  ('/documentos/upload',         auth, upload.array('archivos', 50), 
 router.get   ('/documentos/:uuid/download', auth, docsCtrl.descargar);
 router.delete('/documentos/:uuid',          auth, docsCtrl.eliminar);
 
+// ─── PREVIEW (descarga de MEGA y devuelve base64) ─────────────
+router.get('/documentos/:uuid/preview', auth, async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT d.nombre_original, d.tipo, d.extension, d.tamanio_bytes,
+             d.mega_link, d.mega_node_id, m.numero AS mega_numero
+      FROM dv_documentos d
+      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      WHERE d.uuid = $1 AND d.activo = TRUE`, [req.params.uuid]);
+
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+    const doc = rows[0];
+
+    if (doc.tamanio_bytes > 15 * 1024 * 1024) {
+      return res.status(413).json({
+        error: 'Archivo muy grande para previsualizar (máx 15 MB)',
+        tooBig: true, nombre: doc.nombre_original, tipo: doc.tipo,
+      });
+    }
+
+    const mega   = require('../config/megaManager');
+    const buffer = await mega.descargarArchivo({
+      megaLink: doc.mega_link, megaNodeId: doc.mega_node_id, megaCuentaNumero: doc.mega_numero,
+    });
+
+    res.json({
+      nombre: doc.nombre_original, tipo: doc.tipo,
+      extension: doc.extension,   base64: buffer.toString('base64'),
+      tamanio: doc.tamanio_bytes,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cargar preview: ' + err.message });
+  }
+});
+
 // ─── CARPETAS ─────────────────────────────────────────────────
 router.get   ('/carpetas',     auth, carpCtrl.listar);
 router.post  ('/carpetas',     auth, carpCtrl.crear);
