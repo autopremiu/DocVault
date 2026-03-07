@@ -173,8 +173,8 @@ El servidor se "duerme" tras 15 min sin tráfico. Primera petición puede tardar
 
 ## 🔑 CREDENCIALES DEFAULT
 ```
-Email:    admin@docvault.com
-Password: Admin2024!
+email: admin@docvault.com
+password: admin123
 ```
 **⚠️ CAMBIAR INMEDIATAMENTE en producción.**
 

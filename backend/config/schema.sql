@@ -112,7 +112,7 @@ ON CONFLICT (email) DO NOTHING;
 
 -- Registrar las 4 cuentas MEGA (actualizar con los emails reales)
 INSERT INTO dv_mega_cuentas (numero, email) VALUES
-(1, 'cuenta1@gmail.com'),
+(1, 'autopremiummanizales@gmail.com'),
 (2, 'cuenta2@gmail.com'),
 (3, 'cuenta3@gmail.com'),
 (4, 'cuenta4@gmail.com')

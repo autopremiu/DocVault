@@ -29,40 +29,45 @@ router.post  ('/documentos/upload',         auth, upload.array('archivos', 50), 
 router.get   ('/documentos/:uuid/download', auth, docsCtrl.descargar);
 router.delete('/documentos/:uuid',          auth, docsCtrl.eliminar);
 
-// ─── PREVIEW (descarga de MEGA y devuelve base64) ─────────────
-router.get('/documentos/:uuid/preview', auth, async (req, res) => {
+// ─── INFO — devuelve metadata + link MEGA (sin descargar el archivo) ──
+// El frontend usa este link para abrir Google Docs Viewer u Office Online
+router.get('/documentos/:uuid/info', auth, async (req, res) => {
   try {
     const { rows } = await query(`
-      SELECT d.nombre_original, d.tipo, d.extension, d.tamanio_bytes,
-             d.mega_link, d.mega_node_id, m.numero AS mega_numero
+      SELECT d.uuid, d.nombre_original, d.nombre_display, d.tipo, d.extension,
+             d.tamanio_bytes, d.tamanio_display, d.descripcion, d.tags, d.descargas,
+             d.mega_link, d.mega_node_id,
+             TO_CHAR(d.created_at,'DD/MM/YYYY HH24:MI') AS fecha,
+             c.nombre AS carpeta_nombre, c.icono AS carpeta_icono,
+             m.numero AS mega_numero, m.email AS mega_email
       FROM dv_documentos d
-      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      LEFT JOIN dv_carpetas c      ON d.carpeta_id     = c.id
+      LEFT JOIN dv_mega_cuentas m  ON d.mega_cuenta_id = m.id
       WHERE d.uuid = $1 AND d.activo = TRUE`, [req.params.uuid]);
 
-    if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
+    if (!rows.length) return res.status(404).json({ error: 'Documento no encontrado' });
+
     const doc = rows[0];
-
-    if (doc.tamanio_bytes > 15 * 1024 * 1024) {
-      return res.status(413).json({
-        error: 'Archivo muy grande para previsualizar (máx 15 MB)',
-        tooBig: true, nombre: doc.nombre_original, tipo: doc.tipo,
-      });
-    }
-
-    const mega   = require('../config/megaManager');
-    const buffer = await mega.descargarArchivo({
-      megaLink: doc.mega_link, megaNodeId: doc.mega_node_id, megaCuentaNumero: doc.mega_numero,
-    });
-
     res.json({
-      nombre: doc.nombre_original, tipo: doc.tipo,
-      extension: doc.extension,   base64: buffer.toString('base64'),
-      tamanio: doc.tamanio_bytes,
+      uuid:          doc.uuid,
+      nombre:        doc.nombre_display,
+      tipo:          doc.tipo,
+      extension:     doc.extension,
+      tamanioDisplay:doc.tamanio_display,
+      tamanioBytes:  doc.tamanio_bytes,
+      descripcion:   doc.descripcion,
+      tags:          doc.tags,
+      descargas:     doc.descargas,
+      fecha:         doc.fecha,
+      carpeta:       `${doc.carpeta_icono} ${doc.carpeta_nombre}`,
+      megaLink:      doc.mega_link,     // ← link público para el visor
+      megaCuenta:    doc.mega_numero,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Error al cargar preview: ' + err.message });
+    res.status(500).json({ error: 'Error al obtener info: ' + err.message });
   }
 });
+
 
 // ─── CARPETAS ─────────────────────────────────────────────────
 router.get   ('/carpetas',     auth, carpCtrl.listar);
