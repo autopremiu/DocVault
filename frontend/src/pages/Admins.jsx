@@ -1,77 +1,190 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 
 export default function Admins(){
 
-const [nombre,setNombre] = useState("");
-const [email,setEmail] = useState("");
-const [password,setPassword] = useState("");
+  const [admins,setAdmins] = useState([]);
+  const [form,setForm] = useState({
+    nombre:"",
+    email:"",
+    password:""
+  });
 
-const crearAdmin = async (e)=>{
+  const cargarAdmins = async ()=>{
+    try{
+      const {data} = await api.get("/admins");
+      setAdmins(data);
+    }catch{
+      toast.error("Error cargando administradores");
+    }
+  };
 
-e.preventDefault();
+  useEffect(()=>{
+    cargarAdmins();
+  },[]);
 
-try{
+  const crearAdmin = async(e)=>{
+    e.preventDefault();
 
-await api.post("/admins",{
-nombre,
-email,
-password
-});
+    try{
 
-toast.success("Administrador creado");
+      await api.post("/admins",form);
 
-setNombre("");
-setEmail("");
-setPassword("");
+      toast.success("Administrador creado");
 
-}catch{
-toast.error("Error creando administrador");
-}
+      setForm({
+        nombre:"",
+        email:"",
+        password:""
+      });
 
-};
+      cargarAdmins();
 
-return(
+    }catch(err){
 
-<div style={{padding:30}}>
+      toast.error(err.response?.data?.error || "Error");
 
-<h2>Crear Administrador</h2>
+    }
 
-<form onSubmit={crearAdmin}>
+  };
 
-<input
-type="text"
-placeholder="Nombre"
-value={nombre}
-onChange={e=>setNombre(e.target.value)}
-required
-/>
+  const desactivar = async(id)=>{
 
-<input
-type="email"
-placeholder="Email"
-value={email}
-onChange={e=>setEmail(e.target.value)}
-required
-/>
+    try{
 
-<input
-type="password"
-placeholder="Contraseña"
-value={password}
-onChange={e=>setPassword(e.target.value)}
-required
-/>
+      await api.patch(`/admins/${id}/desactivar`);
 
-<button type="submit">
-Crear administrador
-</button>
+      toast.success("Administrador desactivado");
 
-</form>
+      cargarAdmins();
 
-</div>
+    }catch{
 
-);
+      toast.error("Error");
+
+    }
+
+  };
+
+  const activar = async(id)=>{
+
+    try{
+
+      await api.patch(`/admins/${id}/activar`);
+
+      toast.success("Administrador activado");
+
+      cargarAdmins();
+
+    }catch{
+
+      toast.error("Error");
+
+    }
+
+  };
+
+  return(
+
+    <div style={{padding:30}}>
+
+      <h2>Administradores</h2>
+
+      {/* FORMULARIO */}
+
+      <form onSubmit={crearAdmin} style={{marginBottom:30}}>
+
+        <input
+          placeholder="Nombre"
+          value={form.nombre}
+          onChange={e=>setForm({...form,nombre:e.target.value})}
+        />
+
+        <input
+          placeholder="Email"
+          value={form.email}
+          onChange={e=>setForm({...form,email:e.target.value})}
+        />
+
+        <input
+          placeholder="Contraseña"
+          type="password"
+          value={form.password}
+          onChange={e=>setForm({...form,password:e.target.value})}
+        />
+
+        <button type="submit">
+          Crear administrador
+        </button>
+
+      </form>
+
+
+      {/* TABLA */}
+
+      <table>
+
+        <thead>
+
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {admins.map(admin=>(
+
+            <tr key={admin.id}>
+
+              <td>{admin.id}</td>
+
+              <td>{admin.nombre}</td>
+
+              <td>{admin.email}</td>
+
+              <td>
+                {admin.activo ? "Activo" : "Desactivado"}
+              </td>
+
+              <td>
+
+                {admin.activo ? (
+
+                  <button
+                    onClick={()=>desactivar(admin.id)}
+                  >
+                    Desactivar
+                  </button>
+
+                ) : (
+
+                  <button
+                    onClick={()=>activar(admin.id)}
+                  >
+                    Activar
+                  </button>
+
+                )}
+
+              </td>
+
+            </tr>
+
+          ))}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  );
 
 }
