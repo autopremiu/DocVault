@@ -8,6 +8,7 @@ import api from './utils/api';
 import VisorDocumento from './components/VisorDocumento';
 import Subir from './pages/Subir';
 import Dashboard from './pages/Dashboard';
+import Admins from './pages/Admins';
 
 // ─── LOGIN ───────────────────────────────────────────────────
 function Login() {
@@ -403,10 +404,6 @@ function Protected({children}) {
   if(loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#0a0c10',color:'#6b7592',fontFamily:"'DM Sans',sans-serif"}}>Cargando...</div>;
   if(!admin) return <Navigate to="/login" replace/>;
   return children;
-}
-
-function Admins() {
-  return <div style={{padding:40,color:'#6b7592',fontFamily:"'DM Sans',sans-serif"}}>Módulo de administradores próximamente.</div>;
 }
 
 export default function App() {
