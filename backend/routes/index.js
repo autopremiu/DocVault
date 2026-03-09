@@ -10,6 +10,7 @@ const authMiddleware = require('../middleware/auth');
 const documentosController = require('../controllers/documentosController');
 const adminController = require("../controllers/adminController");
 
+
 // ─── AUTH ────────────────────────────────────────────────────
 router.post('/auth/login',    authCtrl.login);
 router.get ('/auth/verify',   auth, (req,res) => res.json({ admin: req.admin }));

@@ -35,6 +35,12 @@ export default function Dashboard() {
         <div style={s.title}>Dashboard</div>
         <button style={s.btn} onClick={() => navigate('/subir')}>⬆ Subir Documentos</button>
       </div>
+      <button 
+          style={s.btn} 
+          onClick={() => navigate('/admins')}
+          >
+          👤 Administradores
+      </button>
       <div style={s.content}>
 
         {/* STATS */}

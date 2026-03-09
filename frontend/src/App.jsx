@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import Dashboard from './pages/Dashboard';
 import Subir from './pages/Subir';
 import VisorDocumento from './components/VisorDocumento';
+import Admins from "./pages/Admins";
 
 // ─── LOGIN ───────────────────────────────────────────────────
 function Login() {
@@ -230,7 +231,14 @@ function Actividad() {
 }
 
 // ─── LAYOUT ──────────────────────────────────────────────────
-const NAV=[{to:'/',l:'Dashboard',i:'📊'},{to:'/carpetas',l:'Carpetas',i:'📁'},{to:'/documentos',l:'Documentos',i:'📄'},{to:'/subir',l:'Carga Masiva',i:'⬆️'},{to:'/actividad',l:'Actividad',i:'🕑'}];
+const NAV=[
+ {to:'/',l:'Dashboard',i:'📊'},
+ {to:'/carpetas',l:'Carpetas',i:'📁'},
+ {to:'/documentos',l:'Documentos',i:'📄'},
+ {to:'/subir',l:'Carga Masiva',i:'⬆️'},
+ {to:'/actividad',l:'Actividad',i:'🕑'},
+ {to:'/admins',l:'Administradores',i:'👤'}
+];
 function Layout() {
   const {admin,logout}=useAuth(); const navigate=useNavigate();
   return (
@@ -274,15 +282,22 @@ export default function App() {
       <BrowserRouter>
         <Toaster position="bottom-right" toastOptions={{style:{background:'#181c24',color:'#e8ecf4',border:'1px solid #1e2330',fontFamily:"'DM Sans',sans-serif",fontSize:13},success:{iconTheme:{primary:'#00e5a0',secondary:'#0a0c10'}},error:{iconTheme:{primary:'#ff6b6b',secondary:'#0a0c10'}}}}/>
         <Routes>
+
           <Route path="/login" element={<Login/>}/>
+
           <Route path="/" element={<Protected><Layout/></Protected>}>
+
             <Route index element={<Dashboard/>}/>
             <Route path="carpetas" element={<Carpetas/>}/>
             <Route path="documentos" element={<Documentos/>}/>
             <Route path="subir" element={<Subir/>}/>
             <Route path="actividad" element={<Actividad/>}/>
+            <Route path="admins" element={<Admins/>}/>
+
           </Route>
+
           <Route path="*" element={<Navigate to="/" replace/>}/>
+
         </Routes>
       </BrowserRouter>
     </AuthProvider>
