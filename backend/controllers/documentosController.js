@@ -26,11 +26,13 @@ const listar = async (req, res) => {
     const params = [];
     const conds  = ['d.activo = TRUE'];
 
-    if (carpeta_id) { params.push(carpeta_id);  conds.push(`d.carpeta_id = $${params.length}`); }
-    if (tipo)       { params.push(tipo);         conds.push(`d.tipo = $${params.length}`); }
+    if (carpeta_id) { params.push(carpeta_id); conds.push(`d.carpeta_id = $${params.length}`); }
+    if (tipo)       { params.push(tipo);        conds.push(`d.tipo = $${params.length}`); }
     if (buscar) {
-      params.push(`%${buscar.toLowerCase()}%`);
-      conds.push(`(LOWER(d.nombre_display) LIKE $${params.length} OR LOWER(d.tags) LIKE $${params.length})`);
+      const like = `%${buscar.toLowerCase()}%`;
+      params.push(like); const p1 = params.length;
+      params.push(like); const p2 = params.length;
+      conds.push(`(LOWER(d.nombre_display) LIKE $${p1} OR LOWER(COALESCE(d.tags,'')) LIKE $${p2})`);
     }
 
     const where = conds.join(' AND ');
@@ -47,8 +49,8 @@ const listar = async (req, res) => {
              c.nombre AS carpeta_nombre, c.icono AS carpeta_icono,
              m.numero AS mega_numero
       FROM dv_documentos d
-      JOIN dv_carpetas c      ON d.carpeta_id     = c.id
-      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      LEFT JOIN dv_carpetas c      ON d.carpeta_id     = c.id
+      LEFT JOIN dv_mega_cuentas m  ON d.mega_cuenta_id = m.id
       WHERE ${where}
       ORDER BY d.${validOrden} ${validDir}
       LIMIT $${pLimit} OFFSET $${pOffset}
@@ -69,8 +71,8 @@ const listar = async (req, res) => {
       pages: Math.ceil(parseInt(countRes.rows[0].count) / parseInt(limit)),
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al obtener documentos' });
+    console.error('Error listar documentos:', err);
+    res.status(500).json({ error: 'Error al obtener documentos', detalle: err.message });
   }
 };
 
@@ -217,7 +219,7 @@ const eliminar = async (req, res) => {
 // GET /api/documentos/stats
 const stats = async (req, res) => {
   try {
-    const [docsRes, cuentasRes] = await Promise.all([
+    const [docsRes, cuentasRes, huerfanosRes] = await Promise.all([
       query(`
         SELECT COUNT(*) AS total,
           SUM(CASE WHEN tipo='excel' THEN 1 ELSE 0 END) AS excel,
@@ -226,11 +228,18 @@ const stats = async (req, res) => {
           SUM(tamanio_bytes) AS storage
         FROM dv_documentos WHERE activo = TRUE`),
       query(`SELECT COUNT(*) AS total FROM dv_carpetas WHERE activo = TRUE`),
+      // Detectar documentos huérfanos (carpeta_id no existe o está inactiva)
+      query(`
+        SELECT COUNT(*) AS total FROM dv_documentos d
+        WHERE d.activo = TRUE
+          AND NOT EXISTS (SELECT 1 FROM dv_carpetas c WHERE c.id = d.carpeta_id AND c.activo = TRUE)
+      `),
     ]);
 
     const megaStatus = await mega.estadoCuentas();
 
     const r = docsRes.rows[0];
+    const huerfanos = parseInt(huerfanosRes.rows[0].total) || 0;
     res.json({
       totalDocs:     parseInt(r.total) || 0,
       totalExcel:    parseInt(r.excel) || 0,
@@ -240,6 +249,8 @@ const stats = async (req, res) => {
       storageDisplay: fmtBytes(parseInt(r.storage) || 0),
       totalCarpetas: parseInt(cuentasRes.rows[0].total) || 0,
       megaCuentas:   megaStatus,
+      // Si este número > 0, hay documentos subidos pero sin carpeta válida
+      docsHuerfanos: huerfanos,
     });
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener estadísticas' });
