@@ -39,46 +39,121 @@ function Login() {
 // ─── DOCUMENTOS ──────────────────────────────────────────────
 function Documentos() {
   const location = useLocation();
-  // Si venimos desde Carpetas, location.state puede traer carpeta_id y carpeta_nombre
   const estadoInicial = location.state || {};
 
-  const [docs,setDocs]=useState([]); const [total,setTotal]=useState(0); const [pages,setPages]=useState(1); const [page,setPage]=useState(1); const [loading,setLoading]=useState(true);
-  const [filtros,setFiltros]=useState({tipo:'',buscar:'',carpeta_id: estadoInicial.carpeta_id||'',orden:'created_at',dir:'DESC'});
-  const [carpetaActiva,setCarpetaActiva]=useState(estadoInicial.carpeta_nombre||'');
-  const [carpetas,setCarpetas]=useState([]);
-  const [visor, setVisor] = useState(null);
+  const [docs,      setDocs]      = useState([]);
+  const [total,     setTotal]     = useState(0);
+  const [pages,     setPages]     = useState(1);
+  const [page,      setPage]      = useState(1);
+  const [loading,   setLoading]   = useState(true);
+  const [filtros,   setFiltros]   = useState({tipo:'',buscar:'',carpeta_id:estadoInicial.carpeta_id||'',orden:'created_at',dir:'DESC'});
+  const [carpetaActiva, setCarpetaActiva] = useState(estadoInicial.carpeta_nombre||'');
+  const [carpetas,  setCarpetas]  = useState([]);
+  const [visor,     setVisor]     = useState(null);
+  // ── Selección múltiple ──
+  const [seleccion, setSeleccion] = useState(new Set());
+  const [descargando, setDescargando] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(()=>{api.get('/carpetas').then(r=>setCarpetas(r.data)).catch(()=>{});},[]);
+  useEffect(()=>{ api.get('/carpetas').then(r=>setCarpetas(r.data)).catch(()=>{}); },[]);
 
   const cargar = async(p=1) => {
     setLoading(true);
+    setSeleccion(new Set()); // limpiar selección al recargar
     const params={page:p,limit:40,...filtros};
     Object.keys(params).forEach(k=>!params[k]&&delete params[k]);
     try { const {data}=await api.get('/documentos',{params}); setDocs(data.docs||[]); setTotal(data.total||0); setPages(data.pages||1); setPage(p); }
     catch{toast.error('Error');}finally{setLoading(false);}
   };
-  useEffect(()=>{cargar(1);},[filtros]);
+  useEffect(()=>{ cargar(1); },[filtros]);
 
-  const dl = async(uuid,nombre) => {
-    try { const r=await api.get(`/documentos/${uuid}/download`,{responseType:'blob'}); const url=URL.createObjectURL(r.data); const a=document.createElement('a');a.href=url;a.download=nombre;a.click();URL.revokeObjectURL(url); toast.success('Descargando...'); }
-    catch{toast.error('Error al descargar');}
+  // Toggle un documento
+  const toggleDoc = (uuid) => {
+    setSeleccion(prev => {
+      const next = new Set(prev);
+      next.has(uuid) ? next.delete(uuid) : next.add(uuid);
+      return next;
+    });
   };
-  const del = async(uuid,nombre) => {
+
+  // Seleccionar / deseleccionar todos
+  const toggleTodos = () => {
+    if (seleccion.size === docs.length) setSeleccion(new Set());
+    else setSeleccion(new Set(docs.map(d=>d.uuid)));
+  };
+
+  // Descarga individual
+  const dl = async(uuid, nombre) => {
+    try {
+      const r = await api.get(`/documentos/${uuid}/download`,{responseType:'blob'});
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a'); a.href=url; a.download=nombre; a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Descargando...');
+    } catch { toast.error('Error al descargar'); }
+  };
+
+  // Descarga múltiple como ZIP (uno por uno con delay)
+  const dlSeleccion = async() => {
+    if (!seleccion.size) return;
+    setDescargando(true);
+    const selArr = docs.filter(d => seleccion.has(d.uuid));
+    const toastId = toast.loading(`Descargando 0 / ${selArr.length}...`);
+
+    try {
+      // Cargar JSZip dinámicamente
+      if (!window.JSZip) {
+        await new Promise((res,rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const zip = new window.JSZip();
+
+      for (let i = 0; i < selArr.length; i++) {
+        const d = selArr[i];
+        toast.loading(`Descargando ${i+1} / ${selArr.length}: ${d.nombre_display}`, {id: toastId});
+        try {
+          const r = await api.get(`/documentos/${d.uuid}/download`, {responseType:'blob'});
+          const arrayBuffer = await r.data.arrayBuffer();
+          zip.file(d.nombre_display, arrayBuffer);
+        } catch { toast.error(`Error con: ${d.nombre_display}`); }
+      }
+
+      toast.loading('Generando ZIP...', {id: toastId});
+      const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `DocVault_${selArr.length}_archivos_${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`✅ ZIP con ${selArr.length} archivos descargado`, {id: toastId});
+      setSeleccion(new Set());
+    } catch(err) {
+      toast.error('Error generando ZIP', {id: toastId});
+    } finally { setDescargando(false); }
+  };
+
+  const del = async(uuid, nombre) => {
     if(!confirm(`¿Eliminar "${nombre}"?`))return;
-    try{await api.delete(`/documentos/${uuid}`);toast.success('Eliminado');cargar(page);}
-    catch(e){toast.error(e.response?.data?.error||'Error');}
+    try { await api.delete(`/documentos/${uuid}`); toast.success('Eliminado'); cargar(page); }
+    catch(e){ toast.error(e.response?.data?.error||'Error'); }
   };
 
-  const limpiarCarpeta = () => {
-    setCarpetaActiva('');
-    setFiltros(p=>({...p,carpeta_id:''}));
-  };
+  const limpiarCarpeta = () => { setCarpetaActiva(''); setFiltros(p=>({...p,carpeta_id:''})); };
 
-  const TI = t=>({excel:{bg:'rgba(29,122,69,.2)',c:'#4eca7e',l:'Excel'},word:{bg:'rgba(26,92,192,.2)',c:'#5b9bf8',l:'Word'},ppt:{bg:'rgba(199,64,26,.2)',c:'#ff8c5a',l:'PPT'}}[t]||{bg:'rgba(100,100,100,.2)',c:'#aaa',l:t});
+  const TI = t=>({excel:{bg:'rgba(29,122,69,.2)',c:'#4eca7e',l:'Excel'},word:{bg:'rgba(26,92,192,.2)',c:'#5b9bf8',l:'Word'},ppt:{bg:'rgba(199,64,26,.2)',c:'#ff8c5a',l:'PPT'},pdf:{bg:'rgba(255,107,107,.15)',c:'#ff6b6b',l:'PDF'}}[t]||{bg:'rgba(100,100,100,.2)',c:'#aaa',l:t});
+
+  const todosSeleccionados = docs.length > 0 && seleccion.size === docs.length;
+  const algunoSeleccionado = seleccion.size > 0;
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#0a0c10'}}>
+
+      {/* HEADER */}
       <div style={{background:'#111318',borderBottom:'1px solid #1e2330',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           {carpetaActiva && (
@@ -96,7 +171,28 @@ function Documentos() {
         </div>
       </div>
 
+      {/* BARRA DE SELECCIÓN — aparece cuando hay docs seleccionados */}
+      {algunoSeleccionado && (
+        <div style={{background:'rgba(79,124,255,0.08)',borderBottom:'1px solid rgba(79,124,255,0.2)',padding:'10px 28px',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+          <span style={{fontSize:13,color:'#4f7cff',fontWeight:600}}>
+            ✓ {seleccion.size} documento{seleccion.size>1?'s':''} seleccionado{seleccion.size>1?'s':''}
+          </span>
+          <button
+            onClick={dlSeleccion}
+            disabled={descargando}
+            style={{padding:'7px 18px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#4f7cff,#7b5fff)',color:'#fff',cursor:descargando?'wait':'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:7,opacity:descargando?.7:1}}>
+            {descargando ? '⏳ Generando ZIP...' : `⬇ Descargar ${seleccion.size} como ZIP`}
+          </button>
+          <button
+            onClick={()=>setSeleccion(new Set())}
+            style={{padding:'7px 14px',borderRadius:8,border:'1px solid #1e2330',background:'none',color:'#6b7592',cursor:'pointer',fontSize:13}}>
+            Cancelar selección
+          </button>
+        </div>
+      )}
+
       <div style={{flex:1,overflowY:'auto',padding:24}}>
+        {/* FILTROS */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             {[{v:'',l:'Todos'},{v:'excel',l:'📗 Excel'},{v:'word',l:'📘 Word'},{v:'ppt',l:'📙 PPT'},{v:'pdf',l:'📕 PDF'}].map(t=>(
@@ -119,40 +215,74 @@ function Documentos() {
           </div>
         </div>
 
+        {/* TABLA */}
         <div style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,overflow:'hidden'}}>
           {loading ? <div style={{padding:40,textAlign:'center',color:'#6b7592'}}>Cargando...</div> : (
             <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr>{['Nombre','Tipo','Carpeta','Tamaño','MEGA','Fecha','Acciones'].map(h=><th key={h} style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.8px',color:'#6b7592',padding:'9px 18px',textAlign:'left',borderBottom:'1px solid #1e2330',background:'#181c24',fontWeight:500}}>{h}</th>)}</tr></thead>
+              <thead>
+                <tr>
+                  {/* Checkbox seleccionar todos */}
+                  <th style={{padding:'9px 14px 9px 18px',borderBottom:'1px solid #1e2330',background:'#181c24',width:36}}>
+                    <input type="checkbox" checked={todosSeleccionados} onChange={toggleTodos}
+                      style={{width:15,height:15,cursor:'pointer',accentColor:'#4f7cff'}}/>
+                  </th>
+                  {['Nombre','Tipo','Carpeta','Tamaño','Fecha','Acciones'].map(h=>(
+                    <th key={h} style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.8px',color:'#6b7592',padding:'9px 18px',textAlign:'left',borderBottom:'1px solid #1e2330',background:'#181c24',fontWeight:500}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {docs.map(d=>{ const t=TI(d.tipo); return (
-                  <tr key={d.uuid} style={{cursor:'default'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(79,124,255,0.03)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330',color:'#e8ecf4'}}><span style={{fontWeight:500,maxWidth:280,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.nombre_display}</span></td>
-                    <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330'}}><span style={{display:'inline-block',padding:'2px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:t.bg,color:t.c}}>{t.l}</span></td>
-                    <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>📁 {d.carpeta_nombre}</td>
-                    <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.tamanio_display}</td>
-                    <td style={{padding:'11px 18px',fontSize:11,color:'#00e5a0',borderBottom:'1px solid #1e2330'}}>☁️ C{d.mega_numero}</td>
-                    <td style={{padding:'11px 18px',fontSize:11,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.fecha}</td>
-                    <td style={{padding:'11px 18px',borderBottom:'1px solid #1e2330'}}>
-                      <button style={{background:'rgba(79,124,255,0.1)',border:'1px solid rgba(79,124,255,0.3)',cursor:'pointer',fontSize:13,padding:'4px 10px',borderRadius:6,color:'#4f7cff',marginRight:6,fontWeight:500}} onClick={()=>setVisor({uuid:d.uuid,nombre:d.nombre_display,tipo:d.tipo})}>👁 Ver</button>
-                      <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#6b7592',marginRight:4}} onClick={()=>dl(d.uuid,d.nombre_display)} title="Descargar">⬇</button>
-                      <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#ff6b6b'}} onClick={()=>del(d.uuid,d.nombre_display)} title="Eliminar">🗑</button>
-                    </td>
-                  </tr>
-                );})}
+                {docs.map(d => {
+                  const t = TI(d.tipo);
+                  const sel = seleccion.has(d.uuid);
+                  return (
+                    <tr key={d.uuid}
+                      style={{background: sel ? 'rgba(79,124,255,0.07)' : 'transparent', cursor:'default', transition:'background .1s'}}
+                      onMouseEnter={e=>{ if(!sel) e.currentTarget.style.background='rgba(79,124,255,0.03)'; }}
+                      onMouseLeave={e=>{ if(!sel) e.currentTarget.style.background='transparent'; }}>
+
+                      {/* Checkbox fila */}
+                      <td style={{padding:'11px 14px 11px 18px',borderBottom:'1px solid #1e2330'}}>
+                        <input type="checkbox" checked={sel} onChange={()=>toggleDoc(d.uuid)}
+                          style={{width:15,height:15,cursor:'pointer',accentColor:'#4f7cff'}}/>
+                      </td>
+                      <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330',color:'#e8ecf4'}}>
+                        <span style={{fontWeight:500,maxWidth:280,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.nombre_display}</span>
+                      </td>
+                      <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330'}}>
+                        <span style={{display:'inline-block',padding:'2px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:t.bg,color:t.c}}>{t.l}</span>
+                      </td>
+                      <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>📁 {d.carpeta_nombre}</td>
+                      <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.tamanio_display}</td>
+                      <td style={{padding:'11px 18px',fontSize:11,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.fecha}</td>
+                      <td style={{padding:'11px 18px',borderBottom:'1px solid #1e2330'}}>
+                        <button style={{background:'rgba(79,124,255,0.1)',border:'1px solid rgba(79,124,255,0.3)',cursor:'pointer',fontSize:13,padding:'4px 10px',borderRadius:6,color:'#4f7cff',marginRight:6,fontWeight:500}}
+                          onClick={()=>setVisor({uuid:d.uuid,nombre:d.nombre_display,tipo:d.tipo})}>👁 Ver</button>
+                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#6b7592',marginRight:4}}
+                          onClick={()=>dl(d.uuid,d.nombre_display)} title="Descargar">⬇</button>
+                        <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#ff6b6b'}}
+                          onClick={()=>del(d.uuid,d.nombre_display)} title="Eliminar">🗑</button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!docs.length && (
                   <tr><td colSpan={7} style={{padding:40,textAlign:'center',color:'#6b7592'}}>
-                    {carpetaActiva ? `Esta carpeta no tiene documentos aún` : 'Sin documentos'}
+                    {carpetaActiva ? 'Esta carpeta no tiene documentos aún' : 'Sin documentos'}
                   </td></tr>
                 )}
               </tbody>
             </table>
           )}
         </div>
-        {pages>1&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:20,marginTop:20}}>
-          <button style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 16px',color:'#e8ecf4',cursor:'pointer',fontSize:13}} disabled={page===1} onClick={()=>cargar(page-1)}>← Anterior</button>
-          <span style={{color:'#6b7592',fontSize:13}}>Pág. {page} de {pages}</span>
-          <button style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 16px',color:'#e8ecf4',cursor:'pointer',fontSize:13}} disabled={page===pages} onClick={()=>cargar(page+1)}>Siguiente →</button>
-        </div>}
+
+        {pages>1 && (
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:20,marginTop:20}}>
+            <button style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 16px',color:'#e8ecf4',cursor:'pointer',fontSize:13}} disabled={page===1} onClick={()=>cargar(page-1)}>← Anterior</button>
+            <span style={{color:'#6b7592',fontSize:13}}>Pág. {page} de {pages}</span>
+            <button style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 16px',color:'#e8ecf4',cursor:'pointer',fontSize:13}} disabled={page===pages} onClick={()=>cargar(page+1)}>Siguiente →</button>
+          </div>
+        )}
       </div>
 
       {visor && <VisorDocumento uuid={visor.uuid} nombre={visor.nombre} tipo={visor.tipo} onClose={()=>setVisor(null)}/>}
