@@ -8,6 +8,7 @@ const carpCtrl = require('../controllers/carpetasController');
 const { query } = require('../config/database');
 const authMiddleware = require('../middleware/auth');
 const documentosController = require('../controllers/documentosController');
+const adminController = require("../controllers/adminController");
 
 // ─── AUTH ────────────────────────────────────────────────────
 router.post('/auth/login',    authCtrl.login);
@@ -155,6 +156,18 @@ router.get(
   "/documentos/:uuid/preview",
   documentosController.previewDocumento
 );
+
+
+// ADMINISTRADORES
+
+router.get("/admins", auth, adminController.listarAdmins);
+
+router.post("/admins", auth, adminController.crearAdmin);
+
+router.patch("/admins/:id/desactivar", auth, adminController.desactivarAdmin);
+
+router.patch("/admins/:id/activar", auth, adminController.activarAdmin);
+
 // ─── Error handler multer ─────────────────────────────────────
 router.use((err, req, res, next) => {
   if (err.code === 'LIMIT_FILE_SIZE')  return res.status(400).json({ error: 'Archivo muy grande (máx 200MB)' });

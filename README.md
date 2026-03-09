@@ -126,7 +126,7 @@ SUPABASE_DB_USER        = postgres
 SUPABASE_DB_PASSWORD    = [tu password de Supabase]
 
 MEGA_EMAIL_1            = cuenta1@gmail.com
-MEGA_PASS_1             = [password cuenta 1]
+MEGA_PASS_1             = 
 MEGA_EMAIL_2            = cuenta2@gmail.com
 MEGA_PASS_2             = [password cuenta 2]
 MEGA_EMAIL_3            = cuenta3@gmail.com
