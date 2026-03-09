@@ -7,6 +7,7 @@ const docsCtrl = require('../controllers/documentosController');
 const carpCtrl = require('../controllers/carpetasController');
 const { query } = require('../config/database');
 const authMiddleware = require('../middleware/auth');
+const documentosController = require('../controllers/documentosController');
 
 // ─── AUTH ────────────────────────────────────────────────────
 router.post('/auth/login',    authCtrl.login);
