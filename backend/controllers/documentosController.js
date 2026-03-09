@@ -275,4 +275,28 @@ const stats = async (req, res) => {
   }
 };
 
+
+exports.previewDocumento = async (req, res) => {
+  try {
+
+    const { uuid } = req.params;
+
+    const doc = await Documento.findOne({ where: { uuid } });
+
+    if (!doc) {
+      return res.status(404).json({ error: "Documento no encontrado" });
+    }
+
+    const stream = await megaManager.obtenerStream(doc.mega_file_id);
+
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Content-Type", doc.mime_type);
+
+    stream.pipe(res);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error al visualizar documento");
+  }
+};
 module.exports = { listar, upload, descargar, eliminar, stats };

@@ -16,7 +16,9 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
       .then(r => {
         setDocInfo(r.data);
         if (!r.data.megaLink) { setEstado('nolink'); return; }
-        setViewerUrl(`https://docs.google.com/viewer?url=${encodeURIComponent(r.data.megaLink)}&embedded=true`);
+        setViewerUrl(`https://docs.google.com/gview?url=${encodeURIComponent(
+          api.defaults.baseURL + "/documentos/" + uuid + "/preview"
+        )}&embedded=true`);
         setEstado('ok');
       })
       .catch(() => setEstado('error'));
