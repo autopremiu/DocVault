@@ -1,45 +1,34 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useState, useEffect } from 'react';
-import api from './utils/api';
 import toast from 'react-hot-toast';
-import Dashboard from './pages/Dashboard';
-import Subir from './pages/Subir';
+import api from './utils/api';
 import VisorDocumento from './components/VisorDocumento';
-import Admins from "./pages/Admins";
+import Subir from './pages/Subir';
+import Dashboard from './pages/Dashboard';
 
 // ─── LOGIN ───────────────────────────────────────────────────
 function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [form, setForm] = useState({ email:'', password:'' });
-  const [loading, setLoading] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault(); setLoading(true);
-    try { await login(form.email, form.password); navigate('/'); }
-    catch(err) { toast.error(err.response?.data?.error || 'Credenciales incorrectas'); }
-    finally { setLoading(false); }
-  };
+  const {login}=useAuth(); const navigate=useNavigate();
+  const [form,setForm]=useState({email:'',password:''}); const [err,setErr]=useState('');
+  const submit=async e=>{e.preventDefault();setErr('');try{await login(form.email,form.password);navigate('/');}catch(e){setErr(e.response?.data?.error||'Error');}};
   return (
-    <div style={{minHeight:'100vh',background:'#0a0c10',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Sans',sans-serif"}}>
-      <div style={{position:'fixed',inset:0,background:'radial-gradient(ellipse 700px 600px at 20% 30%,rgba(79,124,255,.1) 0%,transparent 60%),radial-gradient(ellipse 500px 500px at 80% 70%,rgba(0,229,160,.07) 0%,transparent 60%)',pointerEvents:'none'}}/>
-      <div style={{position:'relative',zIndex:1,background:'#111318',border:'1px solid #1e2330',borderRadius:20,padding:'48px 52px',width:420,boxShadow:'0 40px 80px rgba(0,0,0,.5)'}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,background:'linear-gradient(135deg,#4f7cff,#00e5a0)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:6}}>DocVault</div>
-        <p style={{color:'#6b7592',fontSize:14,marginBottom:12}}>Sistema de Gestión Documental</p>
-        <p style={{display:'inline-block',background:'rgba(79,124,255,.1)',border:'1px solid rgba(79,124,255,.3)',borderRadius:20,padding:'4px 12px',fontSize:12,color:'#4f7cff',marginBottom:28}}>🔒 Solo Administradores</p>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#0a0c10',fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{background:'#111318',border:'1px solid #1e2330',borderRadius:20,padding:40,width:380}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,background:'linear-gradient(135deg,#4f7cff,#00e5a0)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',marginBottom:8}}>DocVault</div>
+        <div style={{fontSize:13,color:'#6b7592',marginBottom:28}}>Sistema de Gestión Documental</div>
         <form onSubmit={submit}>
-          {[{l:'Correo',t:'email',k:'email',p:'admin@empresa.com'},{l:'Contraseña',t:'password',k:'password',p:'••••••••'}].map(f=>(
-            <div key={f.k}>
+          {[{l:'Email',k:'email',t:'email',p:'admin@empresa.com'},{l:'Contraseña',k:'password',t:'password',p:'••••••••'}].map(f=>(
+            <div key={f.k} style={{marginBottom:16}}>
               <label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.8px',color:'#6b7592',marginBottom:8,fontWeight:500}}>{f.l}</label>
-              <input type={f.t} required placeholder={f.p} style={{width:'100%',background:'#181c24',border:'1px solid #1e2330',borderRadius:10,padding:'12px 16px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:15,outline:'none',marginBottom:20,boxSizing:'border-box'}}
-                value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}/>
+              <input type={f.t} style={{width:'100%',background:'#181c24',border:'1px solid #1e2330',borderRadius:10,padding:'12px 16px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:'none',boxSizing:'border-box'}}
+                placeholder={f.p} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}/>
             </div>
           ))}
-          <button type="submit" disabled={loading} style={{width:'100%',background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:10,padding:14,color:'#fff',fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,cursor:'pointer',opacity:loading?.7:1}}>
-            {loading ? 'Verificando...' : 'Acceder al Sistema →'}
-          </button>
+          {err&&<div style={{color:'#ff6b6b',fontSize:13,marginBottom:12}}>{err}</div>}
+          <button type="submit" style={{width:'100%',background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:10,padding:'13px',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',marginTop:4}}>Ingresar</button>
         </form>
       </div>
     </div>
@@ -48,11 +37,19 @@ function Login() {
 
 // ─── DOCUMENTOS ──────────────────────────────────────────────
 function Documentos() {
+  const location = useLocation();
+  // Si venimos desde Carpetas, location.state puede traer carpeta_id y carpeta_nombre
+  const estadoInicial = location.state || {};
+
   const [docs,setDocs]=useState([]); const [total,setTotal]=useState(0); const [pages,setPages]=useState(1); const [page,setPage]=useState(1); const [loading,setLoading]=useState(true);
-  const [filtros,setFiltros]=useState({tipo:'',buscar:'',carpeta_id:'',orden:'created_at',dir:'DESC'});
+  const [filtros,setFiltros]=useState({tipo:'',buscar:'',carpeta_id: estadoInicial.carpeta_id||'',orden:'created_at',dir:'DESC'});
+  const [carpetaActiva,setCarpetaActiva]=useState(estadoInicial.carpeta_nombre||'');
   const [carpetas,setCarpetas]=useState([]);
-  const [visor, setVisor] = useState(null); // { uuid, nombre, tipo }
+  const [visor, setVisor] = useState(null);
+  const navigate = useNavigate();
+
   useEffect(()=>{api.get('/carpetas').then(r=>setCarpetas(r.data)).catch(()=>{});},[]);
+
   const cargar = async(p=1) => {
     setLoading(true);
     const params={page:p,limit:40,...filtros};
@@ -61,6 +58,7 @@ function Documentos() {
     catch{toast.error('Error');}finally{setLoading(false);}
   };
   useEffect(()=>{cargar(1);},[filtros]);
+
   const dl = async(uuid,nombre) => {
     try { const r=await api.get(`/documentos/${uuid}/download`,{responseType:'blob'}); const url=URL.createObjectURL(r.data); const a=document.createElement('a');a.href=url;a.download=nombre;a.click();URL.revokeObjectURL(url); toast.success('Descargando...'); }
     catch{toast.error('Error al descargar');}
@@ -70,49 +68,81 @@ function Documentos() {
     try{await api.delete(`/documentos/${uuid}`);toast.success('Eliminado');cargar(page);}
     catch(e){toast.error(e.response?.data?.error||'Error');}
   };
+
+  const limpiarCarpeta = () => {
+    setCarpetaActiva('');
+    setFiltros(p=>({...p,carpeta_id:''}));
+  };
+
   const TI = t=>({excel:{bg:'rgba(29,122,69,.2)',c:'#4eca7e',l:'Excel'},word:{bg:'rgba(26,92,192,.2)',c:'#5b9bf8',l:'Word'},ppt:{bg:'rgba(199,64,26,.2)',c:'#ff8c5a',l:'PPT'}}[t]||{bg:'rgba(100,100,100,.2)',c:'#aaa',l:t});
+
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#0a0c10'}}>
       <div style={{background:'#111318',borderBottom:'1px solid #1e2330',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4'}}>Documentos <span style={{fontSize:13,fontWeight:400,color:'#6b7592'}}>({total})</span></div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          {carpetaActiva && (
+            <button style={{background:'none',border:'none',color:'#6b7592',cursor:'pointer',fontSize:13,padding:'4px 8px',borderRadius:6}}
+              onClick={()=>navigate('/carpetas')}>← Carpetas</button>
+          )}
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4'}}>
+            {carpetaActiva ? `📁 ${carpetaActiva}` : 'Documentos'}
+            <span style={{fontSize:13,fontWeight:400,color:'#6b7592'}}> ({total})</span>
+          </div>
+          {carpetaActiva && (
+            <button style={{fontSize:11,color:'#6b7592',background:'#181c24',border:'1px solid #1e2330',borderRadius:5,padding:'2px 8px',cursor:'pointer'}}
+              onClick={limpiarCarpeta}>✕ Ver todos</button>
+          )}
+        </div>
       </div>
+
       <div style={{flex:1,overflowY:'auto',padding:24}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {[{v:'',l:'Todos'},{v:'excel',l:'📗 Excel'},{v:'word',l:'📘 Word'},{v:'ppt',l:'📙 PPT'}].map(t=>(
+            {[{v:'',l:'Todos'},{v:'excel',l:'📗 Excel'},{v:'word',l:'📘 Word'},{v:'ppt',l:'📙 PPT'},{v:'pdf',l:'📕 PDF'}].map(t=>(
               <button key={t.v} style={{padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${filtros.tipo===t.v?'#4f7cff':'#1e2330'}`,background:filtros.tipo===t.v?'rgba(79,124,255,.1)':'#181c24',cursor:'pointer',color:filtros.tipo===t.v?'#4f7cff':'#6b7592'}}
                 onClick={()=>setFiltros(p=>({...p,tipo:t.v}))}>{t.l}</button>
             ))}
           </div>
           <div style={{display:'flex',gap:8}}>
-            <input style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 14px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:13,outline:'none',width:220}} placeholder="🔍 Buscar..." value={filtros.buscar} onChange={e=>setFiltros(p=>({...p,buscar:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&cargar(1)}/>
-            <select style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 12px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:13,outline:'none'}} value={filtros.carpeta_id} onChange={e=>setFiltros(p=>({...p,carpeta_id:e.target.value}))}>
-              <option value="">Todas las carpetas</option>
-              {carpetas.map(c=><option key={c.id} value={c.id}>{c.icono} {c.nombre}</option>)}
-            </select>
+            <input style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 14px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:13,outline:'none',width:220}}
+              placeholder="🔍 Buscar..." value={filtros.buscar}
+              onChange={e=>setFiltros(p=>({...p,buscar:e.target.value}))}
+              onKeyDown={e=>e.key==='Enter'&&cargar(1)}/>
+            {!carpetaActiva && (
+              <select style={{background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'8px 12px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:13,outline:'none'}}
+                value={filtros.carpeta_id} onChange={e=>setFiltros(p=>({...p,carpeta_id:e.target.value}))}>
+                <option value="">Todas las carpetas</option>
+                {carpetas.map(c=><option key={c.id} value={c.id}>{c.icono} {c.nombre}</option>)}
+              </select>
+            )}
           </div>
         </div>
+
         <div style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,overflow:'hidden'}}>
           {loading ? <div style={{padding:40,textAlign:'center',color:'#6b7592'}}>Cargando...</div> : (
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead><tr>{['Nombre','Tipo','Carpeta','Tamaño','MEGA','Fecha','Acciones'].map(h=><th key={h} style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.8px',color:'#6b7592',padding:'9px 18px',textAlign:'left',borderBottom:'1px solid #1e2330',background:'#181c24',fontWeight:500}}>{h}</th>)}</tr></thead>
               <tbody>
                 {docs.map(d=>{ const t=TI(d.tipo); return (
-                  <tr key={d.uuid}>
-                    <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330',color:'#e8ecf4'}}><span style={{fontWeight:500,maxWidth:260,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.nombre_display}</span></td>
+                  <tr key={d.uuid} style={{cursor:'default'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(79,124,255,0.03)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330',color:'#e8ecf4'}}><span style={{fontWeight:500,maxWidth:280,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.nombre_display}</span></td>
                     <td style={{padding:'11px 18px',fontSize:13,borderBottom:'1px solid #1e2330'}}><span style={{display:'inline-block',padding:'2px 8px',borderRadius:5,fontSize:11,fontWeight:600,background:t.bg,color:t.c}}>{t.l}</span></td>
                     <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>📁 {d.carpeta_nombre}</td>
                     <td style={{padding:'11px 18px',fontSize:12,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.tamanio_display}</td>
                     <td style={{padding:'11px 18px',fontSize:11,color:'#00e5a0',borderBottom:'1px solid #1e2330'}}>☁️ C{d.mega_numero}</td>
                     <td style={{padding:'11px 18px',fontSize:11,color:'#6b7592',borderBottom:'1px solid #1e2330'}}>{d.fecha}</td>
                     <td style={{padding:'11px 18px',borderBottom:'1px solid #1e2330'}}>
-                      <button style={{background:'rgba(79,124,255,0.1)',border:'1px solid rgba(79,124,255,0.3)',cursor:'pointer',fontSize:13,padding:'4px 10px',borderRadius:6,color:'#4f7cff',marginRight:6,fontWeight:500}} onClick={()=>setVisor({uuid:d.uuid,nombre:d.nombre_display,tipo:d.tipo})} title="Ver / Editar">👁 Ver</button>
+                      <button style={{background:'rgba(79,124,255,0.1)',border:'1px solid rgba(79,124,255,0.3)',cursor:'pointer',fontSize:13,padding:'4px 10px',borderRadius:6,color:'#4f7cff',marginRight:6,fontWeight:500}} onClick={()=>setVisor({uuid:d.uuid,nombre:d.nombre_display,tipo:d.tipo})}>👁 Ver</button>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#6b7592',marginRight:4}} onClick={()=>dl(d.uuid,d.nombre_display)} title="Descargar">⬇</button>
                       <button style={{background:'none',border:'none',cursor:'pointer',fontSize:16,padding:'4px 6px',borderRadius:6,color:'#ff6b6b'}} onClick={()=>del(d.uuid,d.nombre_display)} title="Eliminar">🗑</button>
                     </td>
                   </tr>
                 );})}
-                {!docs.length && <tr><td colSpan={7} style={{padding:40,textAlign:'center',color:'#6b7592'}}>Sin documentos</td></tr>}
+                {!docs.length && (
+                  <tr><td colSpan={7} style={{padding:40,textAlign:'center',color:'#6b7592'}}>
+                    {carpetaActiva ? `Esta carpeta no tiene documentos aún` : 'Sin documentos'}
+                  </td></tr>
+                )}
               </tbody>
             </table>
           )}
@@ -124,27 +154,19 @@ function Documentos() {
         </div>}
       </div>
 
-      {/* VISOR MODAL */}
-      {visor && (
-        <VisorDocumento
-          uuid={visor.uuid}
-          nombre={visor.nombre}
-          tipo={visor.tipo}
-          onClose={() => setVisor(null)}
-        />
-      )}
+      {visor && <VisorDocumento uuid={visor.uuid} nombre={visor.nombre} tipo={visor.tipo} onClose={()=>setVisor(null)}/>}
     </div>
   );
 }
 
 // ─── CARPETAS ────────────────────────────────────────────────
-// ─── CARPETAS ────────────────────────────────────────────────
 function Carpetas() {
   const [carpetas,  setCarpetas]  = useState([]);
   const [modal,     setModal]     = useState(false);
-  const [editando,  setEditando]  = useState(null);  // null = crear, objeto = editar
+  const [editando,  setEditando]  = useState(null);
   const [form,      setForm]      = useState({ nombre:'', icono:'📁', departamento:'' });
-  const [confirmDel,setConfirmDel]= useState(null);  // carpeta a eliminar
+  const [confirmDel,setConfirmDel]= useState(null);
+  const navigate = useNavigate();
 
   const cargar = () => api.get('/carpetas').then(r => setCarpetas(r.data));
   useEffect(() => { cargar(); }, []);
@@ -155,7 +177,8 @@ function Carpetas() {
     setModal(true);
   };
 
-  const abrirEditar = (c) => {
+  const abrirEditar = (e, c) => {
+    e.stopPropagation();
     setEditando(c);
     setForm({ nombre: c.nombre, icono: c.icono, departamento: c.departamento || '' });
     setModal(true);
@@ -185,52 +208,54 @@ function Carpetas() {
     } catch(e) { toast.error(e.response?.data?.error || 'No se puede eliminar'); }
   };
 
+  // Navegar a documentos filtrados por esta carpeta
+  const abrirCarpeta = (c) => {
+    navigate('/documentos', { state: { carpeta_id: String(c.id), carpeta_nombre: `${c.icono} ${c.nombre}` } });
+  };
+
   const ICONOS = ['📁','💰','👥','🚀','⚖️','📢','🏢','💻','📦','📊','📋','🗂️','📌','🔒','🌐'];
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#0a0c10'}}>
-      {/* Header */}
       <div style={{background:'#111318',borderBottom:'1px solid #1e2330',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
         <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4'}}>
           Carpetas <span style={{fontSize:13,color:'#6b7592',fontWeight:400}}>({carpetas.length})</span>
         </div>
-        <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}
+        <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer'}}
           onClick={abrirCrear}>＋ Nueva Carpeta</button>
       </div>
 
-      {/* Grid */}
       <div style={{flex:1,overflowY:'auto',padding:24}}>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:16}}>
           {carpetas.map(c => (
-            <div key={c.id} style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,padding:20,transition:'border-color .2s',position:'relative'}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor='#4f7cff'}
-              onMouseLeave={e=>e.currentTarget.style.borderColor='#1e2330'}>
+            <div key={c.id}
+              style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,padding:20,cursor:'pointer',transition:'all .2s',position:'relative'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor='#4f7cff';e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 24px rgba(79,124,255,0.15)';}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor='#1e2330';e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='none';}}
+              onClick={()=>abrirCarpeta(c)}>
 
               {/* Botones editar/eliminar */}
-              <div style={{position:'absolute',top:12,right:12,display:'flex',gap:4,opacity:0,transition:'opacity .15s'}}
-                className="carpeta-actions"
-                onMouseEnter={e=>e.currentTarget.style.opacity=1}
-                onMouseLeave={e=>e.currentTarget.style.opacity=0}>
-              </div>
-              {/* Siempre visibles en hover del card */}
-              <div style={{position:'absolute',top:12,right:12,display:'flex',gap:4}}>
+              <div style={{position:'absolute',top:10,right:10,display:'flex',gap:4}} onClick={e=>e.stopPropagation()}>
                 <button title="Editar"
-                  style={{width:28,height:28,borderRadius:6,border:'1px solid #1e2330',background:'#181c24',color:'#4f7cff',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}
-                  onClick={e=>{e.stopPropagation();abrirEditar(c);}}>✏️</button>
+                  style={{width:26,height:26,borderRadius:6,border:'1px solid #1e2330',background:'#181c24',color:'#4f7cff',cursor:'pointer',fontSize:12}}
+                  onClick={e=>abrirEditar(e,c)}>✏️</button>
                 <button title="Eliminar"
-                  style={{width:28,height:28,borderRadius:6,border:'1px solid rgba(255,107,107,.3)',background:'rgba(255,107,107,.1)',color:'#ff6b6b',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}
+                  style={{width:26,height:26,borderRadius:6,border:'1px solid rgba(255,107,107,.3)',background:'rgba(255,107,107,.1)',color:'#ff6b6b',cursor:'pointer',fontSize:12}}
                   onClick={e=>{e.stopPropagation();setConfirmDel(c);}}>🗑</button>
               </div>
 
-              <div style={{fontSize:36,marginBottom:10}}>{c.icono}</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,color:'#e8ecf4',marginBottom:4,paddingRight:64}}>{c.nombre}</div>
+              <div style={{fontSize:40,marginBottom:10}}>{c.icono}</div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,color:'#e8ecf4',marginBottom:4,paddingRight:60}}>{c.nombre}</div>
               {c.departamento && <div style={{fontSize:11,color:'#6b7592',marginBottom:10}}>{c.departamento}</div>}
               <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
                 <span style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,background:'rgba(29,122,69,.2)',color:'#4eca7e'}}>{c.total_excel||0} xlsx</span>
                 <span style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,background:'rgba(26,92,192,.2)',color:'#5b9bf8'}}>{c.total_word||0} docx</span>
                 <span style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,background:'rgba(199,64,26,.2)',color:'#ff8c5a'}}>{c.total_ppt||0} pptx</span>
               </div>
-              <div style={{fontSize:12,color:'#6b7592'}}>{c.total_docs||0} documentos</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{fontSize:12,color:'#6b7592'}}>{c.total_docs||0} documentos</div>
+                <div style={{fontSize:11,color:'#4f7cff',fontWeight:500}}>Ver →</div>
+              </div>
             </div>
           ))}
         </div>
@@ -245,7 +270,6 @@ function Carpetas() {
             <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:'#e8ecf4',marginBottom:20}}>
               {editando ? '✏️ Editar Carpeta' : '＋ Nueva Carpeta'}
             </h2>
-
             {[{l:'Nombre *',k:'nombre',p:'Ej: Contratos 2024'},{l:'Departamento',k:'departamento',p:'Ej: Finanzas, RRHH...'}].map(f=>(
               <div key={f.k} style={{marginBottom:14}}>
                 <label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:6}}>{f.l}</label>
@@ -253,18 +277,15 @@ function Carpetas() {
                   placeholder={f.p} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}/>
               </div>
             ))}
-
             <div style={{marginBottom:20}}>
               <label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:8}}>Ícono</label>
               <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
                 {ICONOS.map(i=>(
-                  <button key={i}
-                    style={{width:36,height:36,borderRadius:8,border:`1px solid ${form.icono===i?'#4f7cff':'#1e2330'}`,background:form.icono===i?'rgba(79,124,255,.15)':'#181c24',cursor:'pointer',fontSize:18}}
+                  <button key={i} style={{width:36,height:36,borderRadius:8,border:`1px solid ${form.icono===i?'#4f7cff':'#1e2330'}`,background:form.icono===i?'rgba(79,124,255,.15)':'#181c24',cursor:'pointer',fontSize:18}}
                     onClick={()=>setForm(p=>({...p,icono:i}))}>{i}</button>
                 ))}
               </div>
             </div>
-
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
               <button style={{padding:'9px 18px',borderRadius:8,border:'1px solid #1e2330',background:'none',color:'#6b7592',cursor:'pointer',fontSize:13}}
                 onClick={()=>setModal(false)}>Cancelar</button>
@@ -283,7 +304,7 @@ function Carpetas() {
             onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:48,marginBottom:12}}>🗑️</div>
             <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4',marginBottom:8}}>¿Eliminar carpeta?</div>
-            <div style={{fontSize:13,color:'#6b7592',marginBottom:6}}>
+            <div style={{fontSize:13,color:'#6b7592',marginBottom:12}}>
               <strong style={{color:'#e8ecf4'}}>{confirmDel.icono} {confirmDel.nombre}</strong>
             </div>
             {confirmDel.total_docs > 0 && (
@@ -305,6 +326,7 @@ function Carpetas() {
   );
 }
 
+// ─── ACTIVIDAD ───────────────────────────────────────────────
 function Actividad() {
   const [acts,setActs]=useState([]); const [loading,setLoading]=useState(true);
   useEffect(()=>{api.get('/actividad').then(r=>setActs(r.data)).catch(()=>{}).finally(()=>setLoading(false));});
@@ -383,28 +405,26 @@ function Protected({children}) {
   return children;
 }
 
+function Admins() {
+  return <div style={{padding:40,color:'#6b7592',fontFamily:"'DM Sans',sans-serif"}}>Módulo de administradores próximamente.</div>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="bottom-right" toastOptions={{style:{background:'#181c24',color:'#e8ecf4',border:'1px solid #1e2330',fontFamily:"'DM Sans',sans-serif",fontSize:13},success:{iconTheme:{primary:'#00e5a0',secondary:'#0a0c10'}},error:{iconTheme:{primary:'#ff6b6b',secondary:'#0a0c10'}}}}/>
         <Routes>
-
           <Route path="/login" element={<Login/>}/>
-
           <Route path="/" element={<Protected><Layout/></Protected>}>
-
             <Route index element={<Dashboard/>}/>
             <Route path="carpetas" element={<Carpetas/>}/>
             <Route path="documentos" element={<Documentos/>}/>
             <Route path="subir" element={<Subir/>}/>
             <Route path="actividad" element={<Actividad/>}/>
             <Route path="admins" element={<Admins/>}/>
-
           </Route>
-
           <Route path="*" element={<Navigate to="/" replace/>}/>
-
         </Routes>
       </BrowserRouter>
     </AuthProvider>
