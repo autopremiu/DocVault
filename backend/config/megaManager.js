@@ -1,35 +1,32 @@
 // config/megaManager.js
-// ─────────────────────────────────────────────────────────────
-// Gestiona 4 cuentas MEGA como un sistema de almacenamiento
-// distribuido. Sube a la cuenta con más espacio disponible,
-// balancea la carga automáticamente.
-// ─────────────────────────────────────────────────────────────
 const { Storage } = require('megajs');
 const { query }   = require('./database');
 
-const LIMITE_BYTES = parseInt(process.env.MEGA_LIMIT_BYTES) || 15032385536; // 14 GB
+const LIMITE_BYTES = parseInt(process.env.MEGA_LIMIT_BYTES) || 15032385536;
 
-// Pool de conexiones MEGA en memoria
 const megaPool = {};
 
-// Configuración de las 4 cuentas desde .env
 function getCuentasConfig() {
   const cuentas = [];
   for (let i = 1; i <= 4; i++) {
     const email = process.env[`MEGA_EMAIL_${i}`];
     const pass  = process.env[`MEGA_PASS_${i}`];
-    if (email && pass) cuentas.push({ numero: i, email, pass });
+    // Solo incluir cuentas con credenciales reales (no los valores de ejemplo)
+    if (email && pass &&
+        !email.startsWith('cuenta') &&
+        pass !== `password_cuenta${i}`) {
+      cuentas.push({ numero: i, email, pass });
+    }
   }
   return cuentas;
 }
 
-// Conectar a una cuenta MEGA (con cache)
 async function conectar(numero) {
   if (megaPool[numero]) return megaPool[numero];
 
   const configs = getCuentasConfig();
   const cfg = configs.find(c => c.numero === numero);
-  if (!cfg) throw new Error(`Cuenta MEGA ${numero} no configurada`);
+  if (!cfg) throw new Error(`Cuenta MEGA ${numero} no configurada o sin credenciales válidas`);
 
   console.log(`🔗 Conectando a MEGA cuenta ${numero} (${cfg.email})...`);
 
@@ -45,17 +42,32 @@ async function conectar(numero) {
 }
 
 // Elegir la cuenta con más espacio disponible
+// Solo usa cuentas que tienen credenciales reales en .env
 async function elegirCuenta() {
+  const configs = getCuentasConfig();
+  const numerosValidos = configs.map(c => c.numero);
+
+  console.log('🔍 Cuentas MEGA con credenciales configuradas:', numerosValidos);
+
+  if (!numerosValidos.length) {
+    throw new Error('No hay cuentas MEGA con credenciales reales configuradas en las variables de entorno. Revisa MEGA_EMAIL_x y MEGA_PASS_x.');
+  }
+
   const { rows } = await query(`
     SELECT id, numero, email, bytes_usados, limite_bytes
     FROM dv_mega_cuentas
     WHERE activa = TRUE
       AND bytes_usados < limite_bytes
+      AND numero = ANY($1::int[])
     ORDER BY bytes_usados ASC
     LIMIT 1
-  `);
+  `, [numerosValidos]);
 
-  if (!rows.length) throw new Error('⚠️ Sin espacio disponible en ninguna cuenta MEGA');
+  if (!rows.length) {
+    throw new Error(`Sin espacio disponible en las cuentas configuradas: [${numerosValidos.join(', ')}]`);
+  }
+
+  console.log(`✅ Cuenta elegida: #${rows[0].numero} (${rows[0].email})`);
   return rows[0];
 }
 
@@ -66,22 +78,17 @@ async function subirArchivo({ buffer, nombre, tamanioBytes }) {
 
   console.log(`⬆️  Subiendo "${nombre}" (${(tamanioBytes/1048576).toFixed(2)} MB) → MEGA cuenta ${cuenta.numero}`);
 
-  // Subir a MEGA
   const uploadResult = await storage.upload(
     { name: nombre, size: tamanioBytes },
     buffer
   ).complete;
 
-  // Obtener link público
   const link = await new Promise((res, rej) => {
     uploadResult.link((err, url) => err ? rej(err) : res(url));
   });
 
-  // Actualizar uso de la cuenta en BD
   await query(
-    `UPDATE dv_mega_cuentas 
-     SET bytes_usados = bytes_usados + $1, updated_at = NOW()
-     WHERE id = $2`,
+    `UPDATE dv_mega_cuentas SET bytes_usados = bytes_usados + $1, updated_at = NOW() WHERE id = $2`,
     [tamanioBytes, cuenta.id]
   );
 
@@ -97,7 +104,6 @@ async function subirArchivo({ buffer, nombre, tamanioBytes }) {
 // ─── DESCARGAR ARCHIVO ──────────────────────────────────────
 async function descargarArchivo({ megaLink, megaNodeId, megaCuentaNumero }) {
   try {
-    // Método 1: Por link público (más confiable)
     if (megaLink) {
       const { File } = require('megajs');
       const file = File.fromURL(megaLink);
@@ -105,7 +111,6 @@ async function descargarArchivo({ megaLink, megaNodeId, megaCuentaNumero }) {
       return await file.downloadBuffer();
     }
 
-    // Método 2: Por node ID (si tenemos acceso a la cuenta)
     if (megaNodeId && megaCuentaNumero) {
       const storage = await conectar(megaCuentaNumero);
       const file = storage.files[megaNodeId];
@@ -131,26 +136,25 @@ async function eliminarArchivo({ megaNodeId, megaCuentaNumero, megaCuentaId, tam
       }
     }
 
-    // Liberar espacio en el registro
     if (megaCuentaId && tamanioBytes) {
       await query(
-        `UPDATE dv_mega_cuentas
-         SET bytes_usados = GREATEST(0, bytes_usados - $1), updated_at = NOW()
-         WHERE id = $2`,
+        `UPDATE dv_mega_cuentas SET bytes_usados = GREATEST(0, bytes_usados - $1), updated_at = NOW() WHERE id = $2`,
         [tamanioBytes, megaCuentaId]
       );
     }
   } catch (err) {
     console.error('Error eliminando de MEGA:', err.message);
-    // No lanzar error — el registro en BD igual se elimina
   }
 }
 
 // ─── ESTADO DE CUENTAS ──────────────────────────────────────
 async function estadoCuentas() {
+  const configs = getCuentasConfig();
+  const numerosValidos = configs.map(c => c.numero);
+
   const { rows } = await query(`
     SELECT numero, email, bytes_usados, limite_bytes,
-      ROUND((bytes_usados::numeric / limite_bytes) * 100, 1) AS porcentaje_uso,
+      ROUND((bytes_usados::numeric / NULLIF(limite_bytes,0)) * 100, 1) AS porcentaje_uso,
       limite_bytes - bytes_usados AS bytes_disponibles
     FROM dv_mega_cuentas
     WHERE activa = TRUE
@@ -158,12 +162,13 @@ async function estadoCuentas() {
   `);
 
   return rows.map(r => ({
-    numero:          r.numero,
-    email:           r.email,
-    usadoGB:         (r.bytes_usados / 1073741824).toFixed(2),
-    disponibleGB:    (r.bytes_disponibles / 1073741824).toFixed(2),
-    totalGB:         (r.limite_bytes / 1073741824).toFixed(2),
-    porcentajeUso:   parseFloat(r.porcentaje_uso),
+    numero:        r.numero,
+    email:         r.email,
+    usadoGB:       (r.bytes_usados / 1073741824).toFixed(2),
+    disponibleGB:  (r.bytes_disponibles / 1073741824).toFixed(2),
+    totalGB:       (r.limite_bytes / 1073741824).toFixed(2),
+    porcentajeUso: parseFloat(r.porcentaje_uso) || 0,
+    configurada:   numerosValidos.includes(r.numero), // ← indica si tiene credenciales
   }));
 }
 

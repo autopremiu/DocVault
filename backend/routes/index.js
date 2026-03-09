@@ -99,6 +99,55 @@ router.get('/mega/status', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ─── DIAGNÓSTICO (sin auth para poder acceder fácil) ─────────
+router.get('/diagnostico', async (req, res) => {
+  const result = { timestamp: new Date().toISOString(), checks: {} };
+
+  // 1. Variables de entorno MEGA
+  result.checks.megaEnv = {};
+  for (let i = 1; i <= 4; i++) {
+    const email = process.env['MEGA_EMAIL_' + i];
+    const pass  = process.env['MEGA_PASS_' + i];
+    result.checks.megaEnv['cuenta' + i] = {
+      emailConfigured: !!email,
+      email: email ? email.substring(0, 5) + '***' : 'NO CONFIGURADO',
+      passConfigured: !!pass && pass !== 'password_cuenta' + i,
+    };
+  }
+
+  // 2. Base de datos — contar registros
+  try {
+    const { query } = require('../config/database');
+    const [docs, carpetas, megaCuentas, actividad] = await Promise.all([
+      query('SELECT COUNT(*) FROM dv_documentos WHERE activo = TRUE'),
+      query('SELECT COUNT(*) FROM dv_carpetas WHERE activo = TRUE'),
+      query('SELECT numero, email, bytes_usados FROM dv_mega_cuentas ORDER BY numero'),
+      query('SELECT COUNT(*) FROM dv_actividad'),
+    ]);
+    result.checks.db = {
+      status: 'OK',
+      documentos: parseInt(docs.rows[0].count),
+      carpetas: parseInt(carpetas.rows[0].count),
+      actividad: parseInt(actividad.rows[0].count),
+      megaCuentasEnBD: megaCuentas.rows,
+    };
+  } catch (err) {
+    result.checks.db = { status: 'ERROR', error: err.message };
+  }
+
+  // 3. Test conexión MEGA cuenta 1
+  try {
+    const mega = require('../config/megaManager');
+    await mega.conectar(1);
+    result.checks.megaConexion = { status: 'OK', cuenta: 1 };
+  } catch (err) {
+    result.checks.megaConexion = { status: 'ERROR', error: err.message };
+  }
+
+  res.json(result);
+});
+
 // ─── Error handler multer ─────────────────────────────────────
 router.use((err, req, res, next) => {
   if (err.code === 'LIMIT_FILE_SIZE')  return res.status(400).json({ error: 'Archivo muy grande (máx 200MB)' });
