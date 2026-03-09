@@ -136,7 +136,7 @@ export default function Subir() {
           fd.append('carpeta_id', carpetaId);
           // Enviar la ruta de subcarpeta si existe (informativo, para el nombre_display)
           if (item.ruta) fd.append('subcarpeta', item.ruta);
-          await api.post('/documentos/upload', fd, { headers: {'Content-Type':'multipart/form-data'} });
+          await api.post('/documentos/upload', fd);
           clearInterval(interval);
           setQueue(q => q.map(x => x.id === item.id ? {...x, status:'done', progress:100} : x));
           subidos++; bytes += item.rawSize;
