@@ -248,6 +248,67 @@ const previewDocumento = async (req,res)=>{
 
 };
 
+
+//delete
+const eliminar = async (req, res) => {
+  try {
+
+    const { rows } = await query(`
+      SELECT d.nombre_original, d.mega_node_id, d.mega_cuenta_id, d.tamanio_bytes,
+             m.numero AS mega_numero
+      FROM dv_documentos d
+      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      WHERE d.uuid = $1 AND d.activo = TRUE
+    `, [req.params.uuid]);
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "Documento no encontrado" });
+    }
+
+    const doc = rows[0];
+
+    // eliminar archivo en MEGA
+    await mega.eliminarArchivo({
+      megaNodeId: doc.mega_node_id,
+      megaCuentaNumero: doc.mega_numero,
+      megaCuentaId: doc.mega_cuenta_id,
+      tamanioBytes: doc.tamanio_bytes
+    });
+
+    // soft delete en base de datos
+    await query(
+      `UPDATE dv_documentos
+       SET activo = FALSE, updated_at = NOW()
+       WHERE uuid = $1`,
+      [req.params.uuid]
+    );
+
+    // registrar actividad
+    await query(
+      `INSERT INTO dv_actividad
+      (admin_id, accion, descripcion, ip_address)
+      VALUES ($1,'DELETE',$2,$3)`,
+      [
+        req.admin.id,
+        `Eliminado: ${doc.nombre_original}`,
+        req.ip
+      ]
+    );
+
+    res.json({
+      message: "Documento eliminado correctamente"
+    });
+
+  } catch (err) {
+
+    console.error("Error eliminar:", err);
+    res.status(500).json({
+      error: "Error al eliminar documento"
+    });
+
+  }
+};
+
 // ===============================
 // EXPORTS
 // ===============================
