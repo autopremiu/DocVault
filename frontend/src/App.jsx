@@ -138,30 +138,93 @@ function Documentos() {
 }
 
 // ─── CARPETAS ────────────────────────────────────────────────
+// ─── CARPETAS ────────────────────────────────────────────────
 function Carpetas() {
-  const [carpetas,setCarpetas]=useState([]); const [modal,setModal]=useState(false); const [form,setForm]=useState({nombre:'',icono:'📁',departamento:''});
-  const cargar = ()=>api.get('/carpetas').then(r=>setCarpetas(r.data));
-  useEffect(()=>{cargar();},[]);
-  const crear = async()=>{
-    if(!form.nombre.trim())return toast.error('Nombre requerido');
-    try{await api.post('/carpetas',form);toast.success('Carpeta creada');setModal(false);setForm({nombre:'',icono:'📁',departamento:''});cargar();}
-    catch(e){toast.error(e.response?.data?.error||'Error');}
+  const [carpetas,  setCarpetas]  = useState([]);
+  const [modal,     setModal]     = useState(false);
+  const [editando,  setEditando]  = useState(null);  // null = crear, objeto = editar
+  const [form,      setForm]      = useState({ nombre:'', icono:'📁', departamento:'' });
+  const [confirmDel,setConfirmDel]= useState(null);  // carpeta a eliminar
+
+  const cargar = () => api.get('/carpetas').then(r => setCarpetas(r.data));
+  useEffect(() => { cargar(); }, []);
+
+  const abrirCrear = () => {
+    setEditando(null);
+    setForm({ nombre:'', icono:'📁', departamento:'' });
+    setModal(true);
   };
-  const ICONOS=['📁','💰','👥','🚀','⚖️','📢','🏢','💻','📦','📊'];
+
+  const abrirEditar = (c) => {
+    setEditando(c);
+    setForm({ nombre: c.nombre, icono: c.icono, departamento: c.departamento || '' });
+    setModal(true);
+  };
+
+  const guardar = async () => {
+    if (!form.nombre.trim()) return toast.error('Nombre requerido');
+    try {
+      if (editando) {
+        await api.put(`/carpetas/${editando.id}`, form);
+        toast.success('Carpeta actualizada');
+      } else {
+        await api.post('/carpetas', form);
+        toast.success('Carpeta creada');
+      }
+      setModal(false);
+      cargar();
+    } catch(e) { toast.error(e.response?.data?.error || 'Error'); }
+  };
+
+  const eliminar = async (c) => {
+    try {
+      await api.delete(`/carpetas/${c.id}`);
+      toast.success('Carpeta eliminada');
+      setConfirmDel(null);
+      cargar();
+    } catch(e) { toast.error(e.response?.data?.error || 'No se puede eliminar'); }
+  };
+
+  const ICONOS = ['📁','💰','👥','🚀','⚖️','📢','🏢','💻','📦','📊','📋','🗂️','📌','🔒','🌐'];
+
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#0a0c10'}}>
+      {/* Header */}
       <div style={{background:'#111318',borderBottom:'1px solid #1e2330',padding:'0 28px',height:60,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-        <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4'}}>Carpetas</div>
-        <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer'}} onClick={()=>setModal(true)}>＋ Nueva Carpeta</button>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4'}}>
+          Carpetas <span style={{fontSize:13,color:'#6b7592',fontWeight:400}}>({carpetas.length})</span>
+        </div>
+        <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}
+          onClick={abrirCrear}>＋ Nueva Carpeta</button>
       </div>
+
+      {/* Grid */}
       <div style={{flex:1,overflowY:'auto',padding:24}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:16}}>
-          {carpetas.map(c=>(
-            <div key={c.id} style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,padding:20,cursor:'default',transition:'border-color .2s'}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor='#4f7cff'} onMouseLeave={e=>e.currentTarget.style.borderColor='#1e2330'}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:16}}>
+          {carpetas.map(c => (
+            <div key={c.id} style={{background:'#111318',border:'1px solid #1e2330',borderRadius:14,padding:20,transition:'border-color .2s',position:'relative'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor='#4f7cff'}
+              onMouseLeave={e=>e.currentTarget.style.borderColor='#1e2330'}>
+
+              {/* Botones editar/eliminar */}
+              <div style={{position:'absolute',top:12,right:12,display:'flex',gap:4,opacity:0,transition:'opacity .15s'}}
+                className="carpeta-actions"
+                onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                onMouseLeave={e=>e.currentTarget.style.opacity=0}>
+              </div>
+              {/* Siempre visibles en hover del card */}
+              <div style={{position:'absolute',top:12,right:12,display:'flex',gap:4}}>
+                <button title="Editar"
+                  style={{width:28,height:28,borderRadius:6,border:'1px solid #1e2330',background:'#181c24',color:'#4f7cff',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}
+                  onClick={e=>{e.stopPropagation();abrirEditar(c);}}>✏️</button>
+                <button title="Eliminar"
+                  style={{width:28,height:28,borderRadius:6,border:'1px solid rgba(255,107,107,.3)',background:'rgba(255,107,107,.1)',color:'#ff6b6b',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center'}}
+                  onClick={e=>{e.stopPropagation();setConfirmDel(c);}}>🗑</button>
+              </div>
+
               <div style={{fontSize:36,marginBottom:10}}>{c.icono}</div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,color:'#e8ecf4',marginBottom:4}}>{c.nombre}</div>
-              {c.departamento&&<div style={{fontSize:11,color:'#6b7592',marginBottom:10}}>{c.departamento}</div>}
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:700,color:'#e8ecf4',marginBottom:4,paddingRight:64}}>{c.nombre}</div>
+              {c.departamento && <div style={{fontSize:11,color:'#6b7592',marginBottom:10}}>{c.departamento}</div>}
               <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
                 <span style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,background:'rgba(29,122,69,.2)',color:'#4eca7e'}}>{c.total_excel||0} xlsx</span>
                 <span style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,background:'rgba(26,92,192,.2)',color:'#5b9bf8'}}>{c.total_word||0} docx</span>
@@ -172,23 +235,68 @@ function Carpetas() {
           ))}
         </div>
       </div>
-      {modal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={()=>setModal(false)}>
-          <div style={{background:'#111318',border:'1px solid #1e2330',borderRadius:16,padding:32,width:440}} onClick={e=>e.stopPropagation()}>
-            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:'#e8ecf4',marginBottom:20}}>Nueva Carpeta</h2>
+
+      {/* Modal Crear / Editar */}
+      {modal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}}
+          onClick={()=>setModal(false)}>
+          <div style={{background:'#111318',border:'1px solid #1e2330',borderRadius:16,padding:32,width:460,maxWidth:'94vw'}}
+            onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:'#e8ecf4',marginBottom:20}}>
+              {editando ? '✏️ Editar Carpeta' : '＋ Nueva Carpeta'}
+            </h2>
+
             {[{l:'Nombre *',k:'nombre',p:'Ej: Contratos 2024'},{l:'Departamento',k:'departamento',p:'Ej: Finanzas, RRHH...'}].map(f=>(
-              <div key={f.k}><label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:6}}>{f.l}</label>
-              <input style={{width:'100%',background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'10px 14px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:'none',marginBottom:14,boxSizing:'border-box'}}
-                placeholder={f.p} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}/></div>
+              <div key={f.k} style={{marginBottom:14}}>
+                <label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:6}}>{f.l}</label>
+                <input style={{width:'100%',background:'#181c24',border:'1px solid #1e2330',borderRadius:8,padding:'10px 14px',color:'#e8ecf4',fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:'none',boxSizing:'border-box'}}
+                  placeholder={f.p} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))}/>
+              </div>
             ))}
-            <div style={{marginBottom:16}}><label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:8}}>Ícono</label>
+
+            <div style={{marginBottom:20}}>
+              <label style={{display:'block',fontSize:11,textTransform:'uppercase',letterSpacing:'.7px',color:'#6b7592',marginBottom:8}}>Ícono</label>
               <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                {ICONOS.map(i=><button key={i} style={{width:36,height:36,borderRadius:8,border:`1px solid ${form.icono===i?'#4f7cff':'#1e2330'}`,background:form.icono===i?'rgba(79,124,255,.15)':'#181c24',cursor:'pointer',fontSize:18}} onClick={()=>setForm(p=>({...p,icono:i}))}>{i}</button>)}
+                {ICONOS.map(i=>(
+                  <button key={i}
+                    style={{width:36,height:36,borderRadius:8,border:`1px solid ${form.icono===i?'#4f7cff':'#1e2330'}`,background:form.icono===i?'rgba(79,124,255,.15)':'#181c24',cursor:'pointer',fontSize:18}}
+                    onClick={()=>setForm(p=>({...p,icono:i}))}>{i}</button>
+                ))}
               </div>
             </div>
+
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-              <button style={{padding:'9px 18px',borderRadius:8,border:'1px solid #1e2330',background:'none',color:'#6b7592',cursor:'pointer',fontSize:13}} onClick={()=>setModal(false)}>Cancelar</button>
-              <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer'}} onClick={crear}>Crear</button>
+              <button style={{padding:'9px 18px',borderRadius:8,border:'1px solid #1e2330',background:'none',color:'#6b7592',cursor:'pointer',fontSize:13}}
+                onClick={()=>setModal(false)}>Cancelar</button>
+              <button style={{background:'linear-gradient(135deg,#4f7cff,#7b5fff)',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',fontSize:13,cursor:'pointer'}}
+                onClick={guardar}>{editando ? 'Guardar cambios' : 'Crear'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Eliminación */}
+      {confirmDel && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}}
+          onClick={()=>setConfirmDel(null)}>
+          <div style={{background:'#111318',border:'1px solid rgba(255,107,107,.3)',borderRadius:16,padding:32,width:400,maxWidth:'94vw',textAlign:'center'}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:48,marginBottom:12}}>🗑️</div>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:'#e8ecf4',marginBottom:8}}>¿Eliminar carpeta?</div>
+            <div style={{fontSize:13,color:'#6b7592',marginBottom:6}}>
+              <strong style={{color:'#e8ecf4'}}>{confirmDel.icono} {confirmDel.nombre}</strong>
+            </div>
+            {confirmDel.total_docs > 0 && (
+              <div style={{fontSize:12,color:'#ff8c5a',background:'rgba(199,64,26,.1)',border:'1px solid rgba(199,64,26,.2)',borderRadius:8,padding:'8px 12px',marginBottom:16}}>
+                ⚠️ Esta carpeta tiene {confirmDel.total_docs} documento(s). Muévelos antes de eliminar.
+              </div>
+            )}
+            <div style={{fontSize:12,color:'#6b7592',marginBottom:24}}>Esta acción no se puede deshacer.</div>
+            <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+              <button style={{padding:'9px 22px',borderRadius:8,border:'1px solid #1e2330',background:'none',color:'#6b7592',cursor:'pointer',fontSize:13}}
+                onClick={()=>setConfirmDel(null)}>Cancelar</button>
+              <button style={{padding:'9px 22px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#ff4444,#cc2222)',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600}}
+                onClick={()=>eliminar(confirmDel)}>Sí, eliminar</button>
             </div>
           </div>
         </div>
@@ -197,7 +305,6 @@ function Carpetas() {
   );
 }
 
-// ─── ACTIVIDAD ───────────────────────────────────────────────
 function Actividad() {
   const [acts,setActs]=useState([]); const [loading,setLoading]=useState(true);
   useEffect(()=>{api.get('/actividad').then(r=>setActs(r.data)).catch(()=>{}).finally(()=>setLoading(false));});
