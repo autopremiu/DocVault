@@ -78,32 +78,43 @@ const listar = async (req, res) => {
 
 // POST /api/documentos/upload (carga masiva)
 const upload = async (req, res) => {
+  console.log('📥 UPLOAD iniciado');
+  console.log('   files recibidos:', req.files?.length || 0);
+  console.log('   body:', JSON.stringify(req.body));
+  console.log('   admin:', req.admin?.id, req.admin?.email);
+
   try {
     if (!req.files?.length) return res.status(400).json({ error: 'No se recibieron archivos' });
     const { carpeta_id } = req.body;
     if (!carpeta_id) return res.status(400).json({ error: 'carpeta_id requerido' });
 
-    const carpeta = await query(`SELECT id FROM dv_carpetas WHERE id = $1 AND activo = TRUE`, [carpeta_id]);
-    if (!carpeta.rows.length) return res.status(404).json({ error: 'Carpeta no encontrada' });
+    console.log('🔍 Verificando carpeta:', carpeta_id);
+    const carpeta = await query(`SELECT id, nombre FROM dv_carpetas WHERE id = $1 AND activo = TRUE`, [carpeta_id]);
+    console.log('   carpeta encontrada:', carpeta.rows.length, carpeta.rows[0] || 'NINGUNA');
+    if (!carpeta.rows.length) return res.status(404).json({ error: `Carpeta ${carpeta_id} no encontrada` });
 
     const resultados = [];
     const errores    = [];
 
     for (const file of req.files) {
+      console.log(`\n📄 Procesando: ${file.originalname} (${fmtBytes(file.size)})`);
       try {
         const ext          = file.originalname.split('.').pop().toLowerCase();
         const tipo         = TIPOS[ext] || 'otro';
         const fileUuid     = uuidv4();
         const nombreDisplay = file.originalname;
 
-        // ← SUBIR A MEGA (auto-selecciona la cuenta con más espacio)
+        console.log(`   ⬆️  Subiendo a MEGA...`);
         const { megaCuentaId, megaNodeId, megaLink } = await mega.subirArchivo({
           buffer:       file.buffer,
           nombre:       `${fileUuid}_${file.originalname}`,
           tamanioBytes: file.size,
         });
+        console.log(`   ✅ MEGA OK — cuenta:${megaCuentaId} nodeId:${megaNodeId?.slice(0,12)}... link:${megaLink?.slice(0,40)}...`);
 
-        // Guardar SOLO la metadata en Supabase
+        console.log(`   💾 Guardando en Supabase...`);
+        console.log(`   params: uuid=${fileUuid} tipo=${tipo} ext=${ext} carpeta=${carpeta_id} admin=${req.admin.id} megaCuenta=${megaCuentaId}`);
+
         await query(`
           INSERT INTO dv_documentos
             (uuid, nombre_original, nombre_display, tipo, extension,
@@ -120,27 +131,34 @@ const upload = async (req, res) => {
             req.body.tags || null,
           ]
         );
+        console.log(`   ✅ Supabase INSERT OK`);
 
         await query(
           `INSERT INTO dv_actividad (admin_id, accion, descripcion, ip_address) VALUES ($1,'UPLOAD',$2,$3)`,
           [req.admin.id, `Subido: ${file.originalname} → MEGA cuenta ${megaCuentaId}`, req.ip]
         );
+        console.log(`   ✅ Actividad registrada`);
 
         resultados.push({ nombre: file.originalname, uuid: fileUuid, tipo, tamanio: fmtBytes(file.size), megaLink });
       } catch (fileErr) {
-        console.error(`Error subiendo ${file.originalname}:`, fileErr.message);
+        console.error(`   ❌ ERROR en ${file.originalname}:`);
+        console.error(`      mensaje: ${fileErr.message}`);
+        console.error(`      stack: ${fileErr.stack}`);
         errores.push({ nombre: file.originalname, error: fileErr.message });
       }
     }
 
+    console.log(`\n📊 RESULTADO: ${resultados.length} OK, ${errores.length} errores`);
+    if (errores.length) console.error('   Errores:', JSON.stringify(errores));
+
     res.json({
-      message:    `${resultados.length} subido(s), ${errores.length} error(es)`,
-      archivos:   resultados,
+      message:  `${resultados.length} subido(s), ${errores.length} error(es)`,
+      archivos: resultados,
       errores,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error al subir archivos' });
+    console.error('❌ ERROR GENERAL upload:', err.message, err.stack);
+    res.status(500).json({ error: 'Error al subir archivos', detalle: err.message });
   }
 };
 
