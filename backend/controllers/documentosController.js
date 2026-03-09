@@ -309,6 +309,48 @@ const eliminar = async (req, res) => {
   }
 };
 
+
+// ===============================
+// GET /api/documentos/stats
+// ===============================
+const stats = async (req, res) => {
+  try {
+
+    const docs = await query(`
+      SELECT COUNT(*) AS total,
+      SUM(CASE WHEN tipo='excel' THEN 1 ELSE 0 END) AS excel,
+      SUM(CASE WHEN tipo='word' THEN 1 ELSE 0 END) AS word,
+      SUM(CASE WHEN tipo='ppt' THEN 1 ELSE 0 END) AS ppt,
+      SUM(tamanio_bytes) AS storage
+      FROM dv_documentos
+      WHERE activo = TRUE
+    `);
+
+    const carpetas = await query(`
+      SELECT COUNT(*) AS total
+      FROM dv_carpetas
+      WHERE activo = TRUE
+    `);
+
+    const r = docs.rows[0];
+
+    res.json({
+      totalDocs: parseInt(r.total) || 0,
+      totalExcel: parseInt(r.excel) || 0,
+      totalWord: parseInt(r.word) || 0,
+      totalPpt: parseInt(r.ppt) || 0,
+      storageBytes: parseInt(r.storage) || 0,
+      totalCarpetas: parseInt(carpetas.rows[0].total) || 0
+    });
+
+  } catch (err) {
+
+    console.error("Error stats:", err);
+    res.status(500).json({ error: "Error al obtener estadísticas" });
+
+  }
+};
+
 // ===============================
 // EXPORTS
 // ===============================
