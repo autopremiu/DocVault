@@ -11,7 +11,6 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
   const [estado,    setEstado]    = useState('loading');
   const [docInfo,   setDocInfo]   = useState(null);
   const [viewerUrl, setViewerUrl] = useState('');
-  const [modo,      setModo]      = useState('google');
   const [iframeKey, setIframeKey] = useState(0);
 
   useEffect(() => {
@@ -21,24 +20,11 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
       .then(r => {
         setDocInfo(r.data);
         if (!r.data.megaLink) { setEstado('nolink'); return; }
-        setViewerUrl(makeUrl(r.data.megaLink, 'google'));
+        setViewerUrl(`https://docs.google.com/viewer?url=${encodeURIComponent(r.data.megaLink)}&embedded=true`);
         setEstado('ok');
       })
       .catch(() => setEstado('error'));
   }, [uuid]);
-
-  const makeUrl = (link, m) => {
-    if (m === 'office') return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(link)}`;
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(link)}&embedded=true`;
-  };
-
-  const cambiarModo = (m) => {
-    setModo(m);
-    if (docInfo?.megaLink) {
-      setViewerUrl(makeUrl(docInfo.megaLink, m));
-      setIframeKey(k => k + 1);
-    }
-  };
 
   const recargar = () => setIframeKey(k => k + 1);
 
@@ -77,18 +63,6 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
                   style={{...s.toggleBtn, ...(modo==='google' ? s.toggleActive : {})}}
                   onClick={() => cambiarModo('google')}
                   title="Solo visualización — sin cuenta"
-                >
-                  🔵 Google Docs
-                </button>
-                <button
-                  style={{...s.toggleBtn, ...(modo==='office' ? s.toggleActive : {})}}
-                  onClick={() => cambiarModo('office')}
-                  title="Visualizar y editar — requiere cuenta Microsoft"
-                >
-                  🟦 Office Online
-                </button>
-              </div>
-            )}
             <button style={s.iconBtn} onClick={recargar} title="Recargar visor">↻</button>
             <button style={s.iconBtn} onClick={() => window.open(viewerUrl,'_blank')} title="Abrir en nueva pestaña">↗</button>
             <button style={s.iconBtn} onClick={descargar} title="Descargar original">⬇</button>
@@ -99,23 +73,11 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
         {/* ── BANNER INFO ────────────────────────────────── */}
         {estado === 'ok' && (
           <div style={s.banner}>
-            {modo === 'google' && (
-              <span style={s.bannerTxt}>
-                👁 <strong>Solo lectura</strong> — Google Docs Viewer.
-                Para editar el documento cambia a{' '}
-                <span style={{color:'#4f7cff',cursor:'pointer',fontWeight:600}} onClick={()=>cambiarModo('office')}>
-                  Office Online →
-                </span>
-              </span>
-            )}
-            {modo === 'office' && (
-              <span style={s.bannerTxt}>
-                ✏️ <strong>Edición habilitada</strong> — Microsoft Office Online.
-                Necesitas iniciar sesión con una cuenta Microsoft para guardar cambios.
-              </span>
-            )}
+            <span style={s.bannerTxt}>
+              👁 Google Docs Viewer — visualización sin cuenta requerida
+            </span>
             <span style={{...s.bannerTxt, marginLeft:'auto', color:'#00e5a0'}}>
-              ✓ Archivo guardado en MEGA como <strong>.{ext}</strong> (formato original intacto)
+              ✓ Archivo en MEGA como <strong>.{ext}</strong> — formato original intacto
             </span>
           </div>
         )}
