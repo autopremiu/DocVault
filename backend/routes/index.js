@@ -46,6 +46,9 @@ router.get   ('/documentos',                auth, docsCtrl.listar);
 router.post  ('/documentos/upload',         auth, upload.array('archivos', 50), docsCtrl.upload);
 router.get   ('/documentos/:uuid/download', auth, docsCtrl.descargar);
 router.delete('/documentos/:uuid',          auth, docsCtrl.eliminar);
+router.post  ('/documentos/:uuid/editar',        auth, docsCtrl.abrirEnDrive);
+router.post  ('/documentos/:uuid/guardar-drive', auth, docsCtrl.guardarDesdeDrive);
+router.delete('/documentos/:uuid/cancelar-drive',auth, docsCtrl.cancelarEdicion);
 
 // ─── INFO — devuelve metadata + link MEGA (sin descargar el archivo) ──
 // El frontend usa este link para abrir Google Docs Viewer u Office Online

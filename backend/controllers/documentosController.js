@@ -2,6 +2,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../config/database');
 const mega = require('../config/megaManager');
+const drive = require('../config/googleDriveManager');
 
 // ── Corregir encoding de nombres (multer entrega latin-1, necesitamos UTF-8) ──
 function fixNombre(originalname) {
@@ -362,6 +363,149 @@ const stats = async (req, res) => {
   }
 };
 
+
+// ===============================
+// POST /api/documentos/:uuid/editar
+// Sube el archivo a Google Drive y devuelve el link de edición
+// ===============================
+const abrirEnDrive = async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT d.uuid, d.nombre_original, d.extension, d.mega_link, d.mega_node_id,
+             m.numero AS mega_numero
+      FROM dv_documentos d
+      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      WHERE d.uuid = $1 AND d.activo = TRUE
+    `, [req.params.uuid]);
+
+    if (!rows.length) return res.status(404).json({ error: 'Documento no encontrado' });
+
+    const doc = rows[0];
+    const ext = doc.extension || doc.nombre_original.split('.').pop().toLowerCase();
+
+    // Descargar de MEGA
+    const buffer = await mega.descargarArchivo({
+      megaLink: doc.mega_link,
+      megaNodeId: doc.mega_node_id,
+      megaCuentaNumero: doc.mega_numero,
+    });
+
+    // Subir a Google Drive (con conversión a Google Docs/Sheets/Slides)
+    const { fileId, webViewLink, esEditable } = await drive.subirADrive(buffer, doc.nombre_original, ext);
+
+    // Guardar el fileId en BD para poder recuperar el archivo editado después
+    await query(
+      `UPDATE dv_documentos SET drive_file_id = $1, drive_abierto_at = NOW() WHERE uuid = $2`,
+      [fileId, doc.uuid]
+    );
+
+    res.json({ fileId, webViewLink, esEditable, nombre: doc.nombre_original, ext });
+
+  } catch (err) {
+    console.error('Error abrirEnDrive:', err);
+    res.status(500).json({ error: 'Error al abrir en Google Drive: ' + err.message });
+  }
+};
+
+// ===============================
+// POST /api/documentos/:uuid/guardar-drive
+// Descarga el archivo editado de Drive y lo reemplaza en MEGA
+// ===============================
+const guardarDesdeDrive = async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT d.uuid, d.nombre_original, d.extension, d.drive_file_id,
+             d.mega_node_id, d.mega_cuenta_id, d.tamanio_bytes,
+             m.numero AS mega_numero
+      FROM dv_documentos d
+      LEFT JOIN dv_mega_cuentas m ON d.mega_cuenta_id = m.id
+      WHERE d.uuid = $1 AND d.activo = TRUE
+    `, [req.params.uuid]);
+
+    if (!rows.length) return res.status(404).json({ error: 'Documento no encontrado' });
+
+    const doc = rows[0];
+    if (!doc.drive_file_id) return res.status(400).json({ error: 'Este documento no tiene una sesión de edición activa' });
+
+    const ext = doc.extension || doc.nombre_original.split('.').pop().toLowerCase();
+
+    // Descargar el archivo editado de Google Drive
+    const bufferEditado = await drive.descargarDeDrive(doc.drive_file_id, ext);
+    const nuevoTamanio  = bufferEditado.length;
+    const fmtBytes      = b => b < 1024 ? b+' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' : b < 1073741824 ? (b/1048576).toFixed(1)+' MB' : (b/1073741824).toFixed(2)+' GB';
+
+    // Eliminar el archivo viejo de MEGA
+    await mega.eliminarArchivo({
+      megaNodeId:    doc.mega_node_id,
+      megaCuentaNumero: doc.mega_numero,
+      megaCuentaId:  doc.mega_cuenta_id,
+      tamanioBytes:  doc.tamanio_bytes,
+    });
+
+    // Subir la versión nueva a MEGA
+    const { megaCuentaId, megaNodeId, megaLink } = await mega.subirArchivo({
+      buffer:       bufferEditado,
+      nombre:       `${doc.uuid}_${doc.nombre_original}`,
+      tamanioBytes: nuevoTamanio,
+    });
+
+    // Actualizar registro en BD
+    await query(`
+      UPDATE dv_documentos
+      SET mega_node_id    = $1,
+          mega_cuenta_id  = $2,
+          mega_link       = $3,
+          tamanio_bytes   = $4,
+          tamanio_display = $5,
+          drive_file_id   = NULL,
+          drive_abierto_at= NULL,
+          updated_at      = NOW()
+      WHERE uuid = $6
+    `, [megaNodeId, megaCuentaId, megaLink, nuevoTamanio, fmtBytes(nuevoTamanio), doc.uuid]);
+
+    // Registrar actividad
+    await query(
+      `INSERT INTO dv_actividad (admin_id, accion, descripcion, ip_address) VALUES ($1,'EDIT',$2,$3)`,
+      [req.admin.id, `Editado: ${doc.nombre_original}`, req.ip]
+    );
+
+    // Limpiar de Google Drive (ya no lo necesitamos)
+    await drive.eliminarDeDrive(doc.drive_file_id);
+
+    res.json({ message: 'Documento guardado correctamente', tamanio: fmtBytes(nuevoTamanio) });
+
+  } catch (err) {
+    console.error('Error guardarDesdeDrive:', err);
+    res.status(500).json({ error: 'Error al guardar: ' + err.message });
+  }
+};
+
+// ===============================
+// DELETE /api/documentos/:uuid/cancelar-drive
+// Cancela la edición y limpia el archivo de Drive sin guardar
+// ===============================
+const cancelarEdicion = async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT drive_file_id FROM dv_documentos WHERE uuid = $1 AND activo = TRUE`,
+      [req.params.uuid]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Documento no encontrado' });
+
+    const { drive_file_id } = rows[0];
+    if (drive_file_id) {
+      await drive.eliminarDeDrive(drive_file_id);
+      await query(
+        `UPDATE dv_documentos SET drive_file_id = NULL, drive_abierto_at = NULL WHERE uuid = $1`,
+        [req.params.uuid]
+      );
+    }
+    res.json({ message: 'Edición cancelada' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cancelar: ' + err.message });
+  }
+};
+
 // ===============================
 // EXPORTS
 // ===============================
@@ -371,5 +515,8 @@ module.exports = {
   descargar,
   eliminar,
   stats,
-  previewDocumento
+  previewDocumento,
+  abrirEnDrive,
+  guardarDesdeDrive,
+  cancelarEdicion
 };
