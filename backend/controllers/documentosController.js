@@ -3,6 +3,17 @@ const { v4: uuidv4 } = require('uuid');
 const { query } = require('../config/database');
 const mega = require('../config/megaManager');
 
+// ── Corregir encoding de nombres (multer entrega latin-1, necesitamos UTF-8) ──
+function fixNombre(originalname) {
+  try {
+    // multer decodifica como latin-1 por defecto; re-encodificar a UTF-8
+    return Buffer.from(originalname, 'latin1').toString('utf8');
+  } catch {
+    return originalname;
+  }
+}
+
+
 const TIPOS = {
   xlsx:'excel', xls:'excel', xlsm:'excel',
   docx:'word',  doc:'word',
@@ -110,13 +121,13 @@ const upload = async (req, res) => {
 
     for (const file of req.files) {
 
-      const ext = file.originalname.split('.').pop().toLowerCase();
+      const ext = fixNombre(file.originalname).split('.').pop().toLowerCase();
       const tipo = TIPOS[ext] || 'otro';
       const fileUuid = uuidv4();
 
       const { megaCuentaId, megaNodeId, megaLink } = await mega.subirArchivo({
         buffer: file.buffer,
-        nombre: `${fileUuid}_${file.originalname}`,
+        nombre: `${fileUuid}_${fixNombre(file.originalname)}`,
         tamanioBytes: file.size
       });
 
@@ -128,8 +139,8 @@ const upload = async (req, res) => {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `,[
         fileUuid,
-        file.originalname,
-        file.originalname,
+        fixNombre(file.originalname),
+        fixNombre(file.originalname),
         tipo,
         ext,
         file.size,
@@ -142,7 +153,7 @@ const upload = async (req, res) => {
       ]);
 
       resultados.push({
-        nombre:file.originalname,
+        nombre:fixNombre(file.originalname),
         uuid:fileUuid
       });
     }
