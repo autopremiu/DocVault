@@ -87,12 +87,13 @@ async function subirADrive(buffer, nombre, ext) {
 
   const fileId = resp.data.id;
 
-  // Hacer el archivo accesible a cualquiera con el link (necesario para abrir en editor)
+  // Permiso de escritura para cualquiera con el link
   await drive.permissions.create({
     fileId,
     requestBody: {
-      role: 'writer',
-      type: 'anyone',
+      role:        'writer',
+      type:        'anyone',
+      allowFileDiscovery: false,
     },
   });
 
@@ -102,9 +103,21 @@ async function subirADrive(buffer, nombre, ext) {
     fields: 'webViewLink, exportLinks',
   });
 
+  // Construir el link de EDICIÓN directo según tipo de archivo
+  let editLink = file.data.webViewLink; // fallback
+  if (mimeGoogle) {
+    if (mimeGoogle.includes('spreadsheet')) {
+      editLink = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
+    } else if (mimeGoogle.includes('document')) {
+      editLink = `https://docs.google.com/document/d/${fileId}/edit`;
+    } else if (mimeGoogle.includes('presentation')) {
+      editLink = `https://docs.google.com/presentation/d/${fileId}/edit`;
+    }
+  }
+
   return {
     fileId,
-    webViewLink: file.data.webViewLink,
+    webViewLink: editLink,
     esEditable: !!mimeGoogle,
   };
 }

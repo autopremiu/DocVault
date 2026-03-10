@@ -45,7 +45,9 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
       setEsEditable(data.esEditable);
       setModo('editar');
       setEstado('ok');
-      toast.success('Editor listo — edita y luego haz clic en "Guardar cambios"', { id: toastId, duration: 5000 });
+      // Abrir en pestaña nueva (Google bloquea sus editores en iframes)
+      window.open(data.webViewLink, '_blank');
+      toast.success('Editor abierto en nueva pestaña — cuando termines haz clic en "Guardar cambios"', { id: toastId, duration: 6000 });
     } catch(e) {
       setEstado('ok');
       toast.error(e.response?.data?.error || 'Error al abrir editor', { id: toastId });
@@ -184,39 +186,52 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
             </div>
           )}
 
-          {/* Iframe ver o editar */}
-          {estado === 'ok' && iframeUrl && (
+          {/* Iframe solo en modo VER */}
+          {estado === 'ok' && modo === 'ver' && viewerUrl && (
             <>
               <iframe
-                key={`${iframeKey}-${modo}`}
-                src={iframeUrl}
+                key={iframeKey}
+                src={viewerUrl}
                 style={s.iframe}
                 frameBorder="0"
                 allowFullScreen
                 title={nombre}
               />
-              {modo === 'ver' && (
-                <div style={s.tip}>
-                  ¿No carga?{' '}
-                  <span style={s.link} onClick={recargar}>Reintentar</span>
-                  {' · '}
-                  <span style={s.link} onClick={() => window.open(viewerUrl, '_blank')}>Abrir en nueva pestaña</span>
-                  {' · '}
-                  <span style={s.link} onClick={descargar}>Descargar</span>
-                  {puedeEditar && (
-                    <> {' · '}
-                      <span style={{ ...s.link, color: '#00e5a0' }} onClick={abrirEditor}>✏️ Editar con Google Docs</span>
-                    </>
-                  )}
-                </div>
-              )}
-              {modo === 'editar' && (
-                <div style={s.tip}>
-                  Edita normalmente — Google guarda automáticamente mientras trabajas.
-                  Cuando termines haz clic en <strong style={{ color: '#00e5a0' }}>"Guardar cambios en MEGA"</strong> arriba.
-                </div>
-              )}
+              <div style={s.tip}>
+                ¿No carga?{' '}
+                <span style={s.link} onClick={recargar}>Reintentar</span>
+                {' · '}
+                <span style={s.link} onClick={() => window.open(viewerUrl, '_blank')}>Abrir en nueva pestaña</span>
+                {' · '}
+                <span style={s.link} onClick={descargar}>Descargar</span>
+                {puedeEditar && (
+                  <> {' · '}
+                    <span style={{ ...s.link, color: '#00e5a0' }} onClick={abrirEditor}>✏️ Editar con Google Docs</span>
+                  </>
+                )}
+              </div>
             </>
+          )}
+
+          {/* Pantalla de edición activa */}
+          {estado === 'ok' && modo === 'editar' && (
+            <div style={s.center}>
+              <div style={{ fontSize: 64, marginBottom: 16 }}>✏️</div>
+              <div style={s.cTitle}>Editor abierto en nueva pestaña</div>
+              <div style={s.cSub}>
+                El documento se abrió en Google Docs en una nueva pestaña.<br/>
+                Edita normalmente — Google guarda automáticamente.<br/>
+                Cuando termines, vuelve aquí y haz clic en <strong style={{color:'#00e5a0'}}>"Guardar cambios en MEGA"</strong>.
+              </div>
+              <div style={{display:'flex', gap:12, marginTop:8}}>
+                <button style={{...s.btnP, background:'linear-gradient(135deg,#00c87a,#00a362)'}} onClick={()=>window.open(driveUrl,'_blank')}>
+                  ↗ Volver al editor
+                </button>
+                <button style={{...s.btnP}} onClick={guardar}>
+                  💾 Guardar cambios en MEGA
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Sin link */}
