@@ -55,7 +55,11 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
   };
 
   // ── Guardar cambios de vuelta a MEGA ──
+  const [yaGuardando, setYaGuardando] = useState(false);
+
   const guardar = async () => {
+    if (yaGuardando) return; // evitar doble clic
+    setYaGuardando(true);
     setEstado('guardando');
     const toastId = toast.loading('Guardando cambios en MEGA...');
     try {
@@ -68,6 +72,8 @@ export default function VisorDocumento({ uuid, nombre, tipo, onClose }) {
     } catch(e) {
       setEstado('ok');
       toast.error(e.response?.data?.error || 'Error al guardar', { id: toastId });
+    } finally {
+      setYaGuardando(false);
     }
   };
 
