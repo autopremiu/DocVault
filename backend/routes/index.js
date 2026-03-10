@@ -22,8 +22,22 @@ const upload = multer({
   limits:  { fileSize: 200 * 1024 * 1024, files: 50 }, // 200MB/archivo, 50 archivos max
   fileFilter: (req, file, cb) => {
     const ext = file.originalname.split('.').pop().toLowerCase();
-    const ok  = ['xlsx','xls','xlsm','docx','doc','pptx','ppt','pdf'].includes(ext);
-    ok ? cb(null, true) : cb(new Error(`Formato no soportado: .${ext}`));
+    const EXTS_OK = ['xlsx','xls','xlsm','xltx','xltm','docx','doc','docm','dotx','pptx','ppt','pptm','potx','pdf'];
+    if (EXTS_OK.includes(ext)) return cb(null, true);
+    const mime = (file.mimetype || '').toLowerCase();
+    const MIMES_OK = [
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel.sheet.macroEnabled.12',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/pdf',
+      'application/octet-stream',
+      'application/zip',
+    ];
+    MIMES_OK.includes(mime) ? cb(null, true) : cb(new Error(`Formato no soportado: .${ext}`));
   },
 });
 
