@@ -394,10 +394,16 @@ const abrirEnDrive = async (req, res) => {
     const { fileId, webViewLink, esEditable } = await drive.subirADrive(buffer, doc.nombre_original, ext);
 
     // Guardar el fileId en BD para poder recuperar el archivo editado después
-    await query(
+    console.log('💾 Guardando drive_file_id:', fileId, 'para uuid:', doc.uuid);
+    const updateResult = await query(
       `UPDATE dv_documentos SET drive_file_id = $1, drive_abierto_at = NOW() WHERE uuid = $2`,
       [fileId, doc.uuid]
     );
+    console.log('💾 UPDATE resultado rowCount:', updateResult.rowCount);
+
+    // Verificar que quedó guardado
+    const verify = await query(`SELECT drive_file_id FROM dv_documentos WHERE uuid = $1`, [doc.uuid]);
+    console.log('💾 Verificación drive_file_id en BD:', verify.rows[0]?.drive_file_id);
 
     res.json({ fileId, webViewLink, esEditable, nombre: doc.nombre_original, ext });
 
