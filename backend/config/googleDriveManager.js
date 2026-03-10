@@ -15,6 +15,9 @@ const CREDENTIALS = {
   token_uri: 'https://oauth2.googleapis.com/token',
 };
 
+// Carpeta compartida en Drive donde se guardan los archivos temporales
+const FOLDER_ID = '1GJgizmILNZBGfli7tSC69VR3GJiXQjDi';
+
 function getDriveClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: CREDENTIALS,
@@ -70,6 +73,7 @@ async function subirADrive(buffer, nombre, ext) {
 
   const metadata = {
     name: nombre,
+    parents: [FOLDER_ID],
     // Si es editable, convertir a formato Google para poder editar
     ...(mimeGoogle && { mimeType: mimeGoogle }),
   };
