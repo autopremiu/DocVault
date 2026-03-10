@@ -87,6 +87,7 @@ async function subirADrive(buffer, nombre, ext) {
     requestBody: metadata,
     media,
     fields: 'id, webViewLink, mimeType',
+    supportsAllDrives: true,
   });
 
   const fileId = resp.data.id;
@@ -95,16 +96,18 @@ async function subirADrive(buffer, nombre, ext) {
   await drive.permissions.create({
     fileId,
     requestBody: {
-      role:        'writer',
-      type:        'anyone',
+      role:               'writer',
+      type:               'anyone',
       allowFileDiscovery: false,
     },
+    supportsAllDrives: true,
   });
 
   // Obtener link actualizado
   const file = await drive.files.get({
     fileId,
     fields: 'webViewLink, exportLinks',
+    supportsAllDrives: true,
   });
 
   // Construir el link de EDICIÓN directo según tipo de archivo
@@ -138,13 +141,13 @@ async function descargarDeDrive(fileId, ext) {
   if (mimeExport) {
     // Exportar de formato Google → formato Office
     response = await drive.files.export(
-      { fileId, mimeType: mimeExport },
+      { fileId, mimeType: mimeExport, supportsAllDrives: true },
       { responseType: 'arraybuffer' }
     );
   } else {
     // Descargar directamente (PDF, etc.)
     response = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'arraybuffer' }
     );
   }
@@ -158,7 +161,7 @@ async function descargarDeDrive(fileId, ext) {
 async function eliminarDeDrive(fileId) {
   try {
     const drive = getDriveClient();
-    await drive.files.delete({ fileId });
+    await drive.files.delete({ fileId, supportsAllDrives: true });
   } catch (e) {
     console.warn('No se pudo eliminar archivo de Drive:', e.message);
   }
